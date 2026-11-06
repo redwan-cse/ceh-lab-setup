@@ -151,9 +151,17 @@ are in the [health report](HEALTH-REPORT.md).
 
 ## Shared CEHv13 tools
 
-**Proposed setup, not yet deployed.** The host/server location is awaiting the
-user's choice. The recommended location is inside Server 2022, keeping the
-extracted course tools in the lab VM instead of the physical host.
+**Deployment in progress; share not yet published.** Server 2022 and the
+dedicated read-only account were approved. Its account will use the existing
+Windows lab password, entered privately; no password is saved in these scripts.
+The original archives stay unchanged on the physical host.
+
+All 20 included archives were transferred. Defender on Server 2022 quarantined
+the Module 05 ZIP before extraction reached it, so the verified-publication
+step correctly stopped. Lab-folder Defender exclusions require an explicit
+decision; the script never adds them by default. Parrot also has an independent
+`apt full-upgrade` in progress, so its missing `cifs-utils` installation must
+wait for the package manager. Do not remove package-manager locks.
 
 Source on Redwan-PC:
 
@@ -168,9 +176,9 @@ extraction. This is archive metadata, not a claim that extraction has passed.
 The ZIP entries are not encrypted; embedded archives may have their own rules.
 Some relative paths are 259 characters long, so extraction must support long paths.
 
-### Recommended layout
+### Selected layout
 
-| Item | Proposed value |
+| Item | Value |
 |---|---|
 | File server | Server 2022, `10.10.10.22`, hostname `WIN-L4HLUP8AT8K` |
 | Extracted library | `C:\CEH-Tools` inside that VM |
@@ -187,7 +195,75 @@ editing them. A read-only master library prevents one VM from changing the
 tools everyone else uses. A writable exchange share can be added separately
 if needed later.
 
-### Implementation sequence
+### Reusable deployment and connection commands
+
+On Redwan-PC, from the repository root, with Python 3.10+, SSH/scp and working
+Administrator SSH key access to Server 2022:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ceh-local-lab\Setup-CehToolsShare.ps1
+```
+
+The server also needs Python (already installed by the ShellGPT setup). The
+command inventories/checksums ZIPs, resumes verified transfers, extracts with
+long-path handling, verifies every extracted file and then prompts privately
+for the share password. The master share uses SMB3 encryption, read-only share
+and NTFS permissions for `cehshare`, and administrator maintenance access.
+Existing unrelated directories, accounts and shares are refused. A rerun
+verifies an existing complete library and skips transfer/extraction. Unexpected
+existing or altered libraries require inspection rather than blind replacement.
+
+Use `-PrepareOnly` to stop after verified extraction without publishing SMB.
+`-SourcePath`, `-Server`, `-UserName`, `-LibraryPath` and `-LabSubnet` allow
+explicit adjustments. Library paths must be dedicated drive-root CEH-Tools
+folders, not OS/user folders.
+
+Only after deliberately approving storage of lab tools in these VM folders,
+add `-AllowLabDefenderExclusions`. For the selected layout it adds exactly:
+
+```text
+C:\CEH-Tools
+C:\CEH-Tools-Staging
+C:\Users\Administrator\ceh-tools-deployment\archives
+```
+
+It leaves Defender protection elsewhere active. Failed extraction staging is
+preserved for inspection. Originals are never deleted. Verified copied ZIPs
+are removed from server staging after successful share publication.
+
+Once publication succeeds, copy `Connect-CehTools.ps1` to each Windows guest
+and run it there as the user who needs the drive:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Connect-CehTools.ps1
+```
+
+Enter `WIN-L4HLUP8AT8K\cehshare` and its password. The helper maps `T:`, verifies
+20 folders and checks that file creation is denied. `-DriveLetter` selects a
+different unused letter. The mapping is persistent; Windows may request the
+credential after a new sign-in. Save it in Windows Credential Manager if wanted.
+It refuses to replace another drive mapping.
+
+Copy `mount-ceh-tools.sh` to Parrot and run after other package operations finish:
+
+```bash
+bash mount-ceh-tools.sh --persist
+```
+
+The script installs `cifs-utils` if needed, prompts for sudo and the share
+password, and mounts `/mnt/ceh-tools` read-only with SMB3 encryption and
+`nosuid,nodev,noexec`. With `--persist`, it adds a managed fstab automount and
+saves the SMB credential in root-owned `/etc/samba/ceh-tools/credentials`
+(directory 700/file 600). Without that flag it creates a temporary mount and
+does not save the credential. Copy tools to a local workspace before using them.
+
+The offline extraction fixtures can be repeated without touching course data:
+
+```powershell
+python -m unittest discover -s ceh-local-lab -p test_ceh_tools_library.py -v
+```
+
+### Deployment verification sequence
 
 1. Recheck source archives, destination space and existing share/user names.
    Refuse conflicts rather than replacing an unrelated folder or share.

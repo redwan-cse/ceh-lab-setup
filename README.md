@@ -114,6 +114,7 @@ reachability remain prerequisites. Setup does not create VMs or exercise roles.
 ## More help
 
 - [Local Hyper-V lab: daily use, SSH keys, Parrot and Android](ceh-local-lab/README.md)
+- [Shared CEHv13 tools library](ceh-local-lab/README.md#shared-cehv13-tools)
 - [Verified lab health and outstanding work](ceh-local-lab/HEALTH-REPORT.md)
 - [Windows source, recovery options and verification](universal/windows/README.md)
 - [Linux details and verification](universal/linux/README.md)
