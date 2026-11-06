@@ -30,10 +30,8 @@ try {
         library = $LibraryPath; server = $Server; subnet = $LabSubnet
     }
     $json = $request | ConvertTo-Json -Compress
-    $code = "& (Join-Path `$env:USERPROFILE 'ceh-tools-deployment\Publish-CehToolsShare.ps1')"
-    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
     # Send the credential over encrypted SSH stdin, never as a command argument/file.
-    $json | & ssh -o BatchMode=yes "$UserName@$Server" "powershell -NoProfile -EncodedCommand $encoded"
+    $json | & ssh -o BatchMode=yes "$UserName@$Server" 'powershell -NoProfile -ExecutionPolicy Bypass -File ceh-tools-deployment/Publish-CehToolsShare.ps1'
     if ($LASTEXITCODE -ne 0) { throw 'SMB publication failed; the verified library remains available for inspection.' }
 } finally {
     if ($pointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }

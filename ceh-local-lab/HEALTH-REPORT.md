@@ -94,7 +94,7 @@ internal-switch membership was confirmed by the elevated audit.
 Windows guests use a Pacific display time zone, while Parrot/host use Dhaka.
 Their UTC clocks matched during checks; differing displayed dates were not clock
 drift. Android was restored only after approval and a current-state checkpoint;
-the Windows guests and Parrot were not rebooted or checkpoint-restored.
+the audit commands did not reboot or checkpoint-restore the Windows guests or Parrot.
 
 ## Installer validation scope
 
@@ -107,3 +107,40 @@ setup preserved its network. Linux setup passed policy, provider-key and offline
 SDK/CLI tests plus partial-venv recovery on Parrot. All four configured ShellGPT
 guests passed the three live API checks described above. These are tested local
 targets, not a guarantee for every OS, proxy, firewall or domain policy.
+
+## Shared tools and Defender follow-up
+
+The shared library was completed on Server 2022 at `C:\CEH-Tools`, published as
+`\\10.10.10.22\CEH-Tools`. It contains 20 prerequisite/module folders and
+32,837 files (9,666,733,364 bytes of original extracted file data). All files
+passed size/ZIP-CRC checks after uploaded archives passed SHA256 validation.
+`CEHv13 ISO.zip` was excluded; the host's 21 original ZIPs remain intact.
+Embedded archives were preserved rather than recursively unpacked or executed.
+
+Defender initially quarantined the uploaded Module 05 ZIP. The user then
+requested active scanning disabled on all three Windows lab VMs and manually
+turned off Windows 11 Tamper Protection. Real-time, behavior and IOAV runtime
+status are now false on `.11`, `.19`, `.22`, with script scanning disabled.
+Defender remains installed; the physical host was not changed. No folder
+exclusions were added. The disable/restore helper preserves original preferences
+inside each guest and checks the effective runtime state. Future Windows/policy
+changes may reactivate scanning; verify before later sessions.
+
+All three Windows accounts mapped `T:` and passed directory-read and denied-
+file-creation checks using the dedicated non-admin `cehshare` identity. The
+share grants that account Read and administrators Full maintenance access.
+SMB encryption is required. Windows may ask for credentials after a later sign-in;
+an already-open desktop may need its own reconnect.
+
+Parrot's unrelated full upgrade completed without interruption. `cifs-utils`
+was then installed and `/mnt/ceh-tools` mounted read-only with SMB 3.1.1, seal,
+nosuid/nodev/noexec. A managed fstab automount and root-only credential file
+support later starts. The five sleep/hibernate targets remain masked.
+Android ADB received the 5,617,024-byte library inventory from that mount at
+`/sdcard/Download/ceh-tools-manifest.json`; it does not have a direct SMB mount.
+The Windows guests' existing disabled-firewall state was preserved; the added
+lab-scoped SMB allow rule alone does not restrict other existing access.
+The exact documented setup command passed a full rerun, verifying the existing
+library and republishing the same share without transferring or extracting
+archives again. Parrot's existing-mount/persistence rerun also passed, with
+root-owned credential directory/file permissions confirmed as 700/600.

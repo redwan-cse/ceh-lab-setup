@@ -11,7 +11,7 @@ case "${1:-}" in
   *) echo 'Usage: bash mount-ceh-tools.sh [--persist]' >&2; exit 1 ;;
 esac
 sudo -v
-if ! command -v mount.cifs >/dev/null; then
+if ! command -v mount.cifs >/dev/null && [[ ! -x /usr/sbin/mount.cifs && ! -x /sbin/mount.cifs ]]; then
   sudo apt-get update
   sudo apt-get install -y cifs-utils
 fi

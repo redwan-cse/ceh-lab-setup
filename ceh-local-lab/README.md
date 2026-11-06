@@ -149,19 +149,40 @@ then rewinds Android's disk/RAM. Preserve work and review the restore before
 using that flag. Do not restore automatically every session. Recovery details
 are in the [health report](HEALTH-REPORT.md).
 
+## Defender scanning controls for the three Windows lab VMs
+
+At the user's request, real-time, behavior, downloaded-file/attachment (IOAV)
+and script scanning were disabled and verified on `.11`, `.19` and `.22`.
+Defender remains installed; its service/platform was not removed. The physical
+host was not changed. No folder exclusions were added for this deployment.
+
+From the repository root on Redwan-PC:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ceh-local-lab\Set-LabDefender.ps1 -Mode Status
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ceh-local-lab\Set-LabDefender.ps1 -Mode Disable
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ceh-local-lab\Set-LabDefender.ps1 -Mode Restore
+```
+
+The helper targets only the three known Windows lab VMs over SSH. Disable saves
+the four original preferences in the guest account's
+`%LOCALAPPDATA%\CEHLab\defender-before.json`. Restore uses that snapshot and
+verifies runtime protection state. It does not bypass Tamper Protection: turn
+that setting off through Windows Security in the guest if Windows blocks the
+change. Tamper Protection itself must also be re-enabled through that UI when
+returning the guest to normal protection.
+
+Windows/policy can reactivate scanning; use Status before another lab session.
+[Microsoft documents automatic real-time protection reactivation](https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-security-center-antivirus).
+
 ## Shared CEHv13 tools
 
-**Deployment in progress; share not yet published.** Server 2022 and the
-dedicated read-only account were approved. Its account will use the existing
-Windows lab password, entered privately; no password is saved in these scripts.
-The original archives stay unchanged on the physical host.
-
-All 20 included archives were transferred. Defender on Server 2022 quarantined
-the Module 05 ZIP before extraction reached it, so the verified-publication
-step correctly stopped. Lab-folder Defender exclusions require an explicit
-decision; the script never adds them by default. Parrot also has an independent
-`apt full-upgrade` in progress, so its missing `cifs-utils` installation must
-wait for the package manager. Do not remove package-manager locks.
+**Deployed and verified on 2026-11-06.** The read-only share is live on Server
+2022. Its dedicated account uses the existing Windows lab password, entered
+privately; no password is saved in these scripts. The original archives stay
+unchanged on the physical host. All three Windows accounts passed read/write-
+denial checks, Parrot's encrypted persistent mount works, and Android file
+delivery through ADB passed. See the [health report](HEALTH-REPORT.md).
 
 Source on Redwan-PC:
 
@@ -172,7 +193,7 @@ D:\CEHv13\CEHv13_Tools_26-Nov-2025\
 The 2026-11-06 inventory found 20 included ZIP archives: Lab Prerequisites and
 Modules 02–20. Exclude **exactly `CEHv13 ISO.zip`**. The included ZIPs occupy
 7.19 GiB and contain 49,052 entries totaling about 9.00 GiB after first-level
-extraction. This is archive metadata, not a claim that extraction has passed.
+extraction. All 32,837 extracted files passed size and ZIP CRC verification.
 The ZIP entries are not encrypted; embedded archives may have their own rules.
 Some relative paths are 259 characters long, so extraction must support long paths.
 
@@ -184,8 +205,8 @@ Some relative paths are 259 characters long, so extraction must support long pat
 | Extracted library | `C:\CEH-Tools` inside that VM |
 | SMB share | `\\10.10.10.22\CEH-Tools` |
 | Guest access | Dedicated non-administrator `cehshare` account, read-only |
-| Windows drive | `T:` where available |
-| Parrot mount | `/mnt/ceh-tools`, read-only |
+| Windows drive | `T:` configured for Win11-Client and both server Administrator accounts |
+| Parrot mount | `/mnt/ceh-tools`, persistent, encrypted and read-only |
 | Android | Copy selected files from the same library through ADB; browsing SMB requires a compatible Android client |
 
 Server 2022 had about 43.7 GiB free at inspection, enough for the 7.19 GiB
@@ -227,7 +248,9 @@ C:\CEH-Tools-Staging
 C:\Users\Administrator\ceh-tools-deployment\archives
 ```
 
-It leaves Defender protection elsewhere active. Failed extraction staging is
+This is an optional alternative; it was not used in the completed deployment.
+The user instead requested the lab-wide scanning changes described above.
+The exclusion option leaves Defender protection elsewhere active. Failed extraction staging is
 preserved for inspection. Originals are never deleted. Verified copied ZIPs
 are removed from server staging after successful share publication.
 
@@ -242,7 +265,10 @@ Enter `WIN-L4HLUP8AT8K\cehshare` and its password. The helper maps `T:`, verifie
 20 folders and checks that file creation is denied. `-DriveLetter` selects a
 different unused letter. The mapping is persistent; Windows may request the
 credential after a new sign-in. Save it in Windows Credential Manager if wanted.
-It refuses to replace another drive mapping.
+It refuses to replace another drive mapping. Drives configured through SSH
+may not appear in an already-open desktop session; reconnect/sign in or run
+the helper from that user's desktop terminal. The UNC path is always available
+with the share credentials.
 
 Copy `mount-ceh-tools.sh` to Parrot and run after other package operations finish:
 
@@ -263,38 +289,16 @@ The offline extraction fixtures can be repeated without touching course data:
 python -m unittest discover -s ceh-local-lab -p test_ceh_tools_library.py -v
 ```
 
-### Deployment verification sequence
-
-1. Recheck source archives, destination space and existing share/user names.
-   Refuse conflicts rather than replacing an unrelated folder or share.
-2. Transfer only the 20 included ZIPs to staging inside the chosen file server.
-   Preserve the originals on D: and keep course binaries out of this Git repo.
-3. Validate archive paths and extract into a new staging library using
-   long-path-aware handling. Preserve each module's existing top-level folder.
-   Do not recursively unpack embedded archives, execute tools or install them.
-4. Verify extracted file sizes and ZIP CRCs; report every failed, blocked or
-   quarantined file. Publish the library only after successful verification.
-   Preserve any existing library until its replacement passes.
-5. Create the dedicated share account with an interactively entered password,
-   stored only by Windows. Grant read access at both the NTFS and SMB layers;
-   administrators retain maintenance access. Keep SMB1 and guest access disabled.
-6. Verify the SMB service, authentication and firewall behavior. The Windows
-   guests' firewalls were previously disabled; adding a scoped allow rule alone
-   would not restrict access while the firewall is off. Any firewall enablement
-   must preserve working SSH and be checked immediately afterward.
-7. Connect Windows guests and Parrot, verify directory listing and file reads,
-   and confirm that the share account cannot create/delete files. Test Android
-   file delivery using `adb push` from Parrot's mounted library.
-8. Save a reusable deployment script and client connection commands under
-   `ceh-local-lab`, with no passwords or course files committed. A rerun should
-   verify existing state and skip already verified extraction work.
-
 Android ADB supports copying files, rather than automatically providing a
 Windows-style network drive. Example after the Parrot mount is configured:
 
 ```bash
 adb -s 10.10.10.9:5555 push /mnt/ceh-tools/PATH_TO_FILE /sdcard/Download/
 ```
+
+The tested transfer placed the library's inventory at
+`/sdcard/Download/ceh-tools-manifest.json`. Android is not configured with a
+direct SMB mount; use ADB for selected files or configure an SMB-capable client.
 
 References: [Microsoft SMB share creation](https://learn.microsoft.com/en-us/powershell/module/smbshare/new-smbshare)
 and [Android ADB file transfer](https://developer.android.com/tools/adb#copyfiles).

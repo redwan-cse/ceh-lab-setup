@@ -18,6 +18,10 @@
 **/id_ed25519*
 **/authorized_keys
 **/administrators_authorized_keys
+**/credentials
+**/CEH-Tools/
+**/CEH-Tools-Staging/
+**/ceh-tools-deployment/
 **/*.pem
 **/*.pfx
 **/*.key

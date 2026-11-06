@@ -28,8 +28,8 @@ if ($share) {
 $smb = Get-SmbServerConfiguration
 if ($smb.EnableSMB1Protocol -or -not $smb.EnableSMB2Protocol) { throw 'Expected SMB1 disabled and SMB2/3 enabled; inspect server policy.' }
 $ruleName = 'CEH-Tools-SMB-Lab'
-$rule = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
-if ($rule -and $rule.DisplayName -ne 'CEH Tools SMB (lab subnet)') { throw 'Firewall rule name conflict.' }
+$firewallRule = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+if ($firewallRule -and $firewallRule.DisplayName -ne 'CEH Tools SMB (lab subnet)') { throw 'Firewall rule name conflict.' }
 $password = ConvertTo-SecureString ([string]$r.password) -AsPlainText -Force
 try {
     if ($user) { Set-LocalUser -Name 'cehshare' -Password $password }
@@ -44,8 +44,8 @@ $acl = New-Object Security.AccessControl.DirectorySecurity
 $acl.SetAccessRuleProtection($true, $false)
 foreach ($item in @(@('S-1-5-18','FullControl'), @('S-1-5-32-544','FullControl'), @($user.SID.Value,'ReadAndExecute'))) {
     $sid = New-Object Security.Principal.SecurityIdentifier($item[0])
-    $rule = New-Object Security.AccessControl.FileSystemAccessRule($sid,$item[1],'ContainerInherit,ObjectInherit','None','Allow')
-    $acl.AddAccessRule($rule)
+    $accessRule = New-Object Security.AccessControl.FileSystemAccessRule($sid,$item[1],'ContainerInherit,ObjectInherit','None','Allow')
+    $acl.AddAccessRule($accessRule)
 }
 Set-Acl -LiteralPath $path -AclObject $acl
 if (-not $share) {
@@ -54,7 +54,7 @@ if (-not $share) {
     Set-SmbShare -Name 'CEH-Tools' -EncryptData $true -CachingMode None -FolderEnumerationMode AccessBased -Confirm:$false | Out-Null
     Grant-SmbShareAccess -Name 'CEH-Tools' -AccountName $account -AccessRight Read -Force | Out-Null
 }
-if ($rule) { Remove-NetFirewallRule -Name $ruleName }
+if ($firewallRule) { Remove-NetFirewallRule -Name $ruleName }
 New-NetFirewallRule -Name $ruleName -DisplayName 'CEH Tools SMB (lab subnet)' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 445 -LocalAddress $r.server -RemoteAddress $r.subnet -Profile Any | Out-Null
 if (@(Get-NetFirewallProfile | Where-Object Enabled).Count -ne 3) {
     Write-Warning 'Some firewall profiles remain disabled from the original lab. This scoped rule does not restrict other existing access.'
