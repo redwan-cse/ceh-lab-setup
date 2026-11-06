@@ -1,0 +1,27 @@
+# Publish only the curated kit. Keep previous scratch files/logs/ZIPs local.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/ceh-local-lab/
+!/universal/
+
+# Never publish runtime credentials, profiles, logs, caches or local archives.
+**/__pycache__/
+**/*.py[cod]
+**/*.log
+**/*.zip
+**/.sgptrc
+**/.env
+**/.env.*
+**/id_rsa*
+**/id_ed25519*
+**/authorized_keys
+**/administrators_authorized_keys
+**/*.pem
+**/*.pfx
+**/*.key
+**/venv/
+**/.venv/
+**/node_modules/
+**/cache*/
