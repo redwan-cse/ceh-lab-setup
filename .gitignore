@@ -1,4 +1,4 @@
-# Publish only the curated kit. Keep previous scratch files/logs/ZIPs local.
+# Publish only the maintained setup kit; exclude runtime artifacts and credentials.
 /*
 !/.gitignore
 !/.gitattributes

@@ -74,7 +74,7 @@ Initially `.9` was absent even though Hyper-V confirmed Android was running
 on the correct switch. After explicit user approval, the recovery helper saved
 current state as `before-adb-recovery-20261106-135746-13dca2`, then restored the
 existing ADB checkpoint. Host TCP/5555 and actual ADB shell checks from Parrot
-now pass. See [Android ADB](ANDROID-ADB.md). No other guest was restored.
+now pass. See [Android ADB instructions](README.md#android-mobile-target). No other guest was restored.
 
 The new attacker user on Parrot has sudo membership and this host's public key.
 Password SSH, key-only SSH and password-authenticated sudo were tested. Its
@@ -95,3 +95,15 @@ Windows guests use a Pacific display time zone, while Parrot/host use Dhaka.
 Their UTC clocks matched during checks; differing displayed dates were not clock
 drift. Android was restored only after approval and a current-state checkpoint;
 the Windows guests and Parrot were not rebooted or checkpoint-restored.
+
+## Installer validation scope
+
+The universal Windows SSH source passed PowerShell 5.1 config, release-asset
+and service-path fixtures. The official OpenSSH MSI download had a matching
+digest and valid Microsoft signature; it was not installed on the physical host.
+The portable Windows launcher was tested by itself on Server 2022, including
+missing-Python bootstrap. Before/after IP, DNS and route checks confirmed SSH
+setup preserved its network. Linux setup passed policy, provider-key and offline
+SDK/CLI tests plus partial-venv recovery on Parrot. All four configured ShellGPT
+guests passed the three live API checks described above. These are tested local
+targets, not a guarantee for every OS, proxy, firewall or domain policy.

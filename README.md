@@ -1,45 +1,123 @@
 # ceh-lab-setup
 
-SSH and StepFun ShellGPT setup kits for an authorized CEH lab.
+OpenSSH and ShellGPT setup for CEH practice. ShellGPT **1.5.1**, model
+**step-5-preview**, **high** reasoning, endpoint
+`https://api.stepfun.ai/step_plan/v1`.
 
-**New to the project? Read the [beginner guide](ceh-local-lab/BEGINNER-GUIDE.md).**
-It explains which computer to type on, starting the existing VMs, building a
-lab, SSH, ShellGPT, Android recovery and basic troubleshooting.
+## Quick start
 
-| Folder | Purpose |
-|---|---|
-| [ceh-local-lab](ceh-local-lab/README.md) | Proven local scripts, known hosts and setup notes. Includes the two original SSH scripts unchanged. |
-| [universal](universal/README.md) | Generic Windows copy-and-run launcher and separate Linux installer, independent of the local subnet. |
+Clone once and enter the repository:
 
-For a fresh Windows lab, copy `universal/Start-CehLab.ps1` onto the target and
-run it from elevated Windows PowerShell:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-CehLab.ps1
+```text
+git clone https://github.com/redwan-cse/ceh-lab-setup.git
+cd ceh-lab-setup
 ```
 
-ShellGPT uses version 1.5.1, model `step-5-preview`, endpoint
-`https://api.stepfun.ai/step_plan/v1`, and `REASONING_EFFORT=high`.
-Recognized inspection commands execute automatically; file deletion,
-installation, scripts and unknown commands require approval.
+For an existing clone, run `git pull --ff-only`. This private repository requires
+GitHub access. Run the following command **on the machine you want to configure**,
+from the repository folder.
 
-The generic SSH setup preserves the target's network configuration. A different
-IP/subnet is supported; network reachability, permissions and download access
-are prerequisites. The universal README explains firewall scope and limitations.
+### Windows 11 / Windows Server 2019 or 2022
 
-For a read-only local check from the Hyper-V host:
+Open **Windows PowerShell as Administrator** under the account that will use
+ShellGPT, then run this one command:
 
 ```powershell
-.\ceh-local-lab\Test-CehLab.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1
 ```
 
-Run it in Administrator PowerShell for Hyper-V inventory, or add `-SkipHyperV`
-for network checks without elevation. Read the [latest health report](ceh-local-lab/HEALTH-REPORT.md)
-for verified results and outstanding items; an open port alone is not a full
-application-health test.
+Sets up OpenSSH, reuses or installs Python, installs ShellGPT, applies the
+StepFun configuration and asks for the API key with hidden input. Password and
+public-key SSH stay enabled. It does not copy your SSH key automatically.
 
-Passwords, API keys, private keys, runtime configs and raw logs are excluded.
-The supplied Gemini guide is preserved with [provenance and corrections](ceh-local-lab/reference/README.md),
-and the [setup summary](ceh-local-lab/conversation-summary.md) connects it to the
-tested project. The archived guide is historical reference, not the default
-script to run on a new machine.
+### Parrot / Debian-based Linux
+
+Open a terminal as your **normal user**, then run this one command:
+
+```bash
+bash ./universal/linux/setup-shellgpt-parrot.sh
+```
+
+Installs ShellGPT in a private Python environment, applies the StepFun
+configuration, checks it offline and asks for the API key with hidden input.
+Sudo is used only for missing Python/venv prerequisites. Python 3.10+ is required.
+This command configures ShellGPT; it does not install or change Linux SSH.
+Parrot Security 7.4 is the tested Linux target; macOS and other distributions
+are not supported by this installer.
+
+### Use it
+
+Open a **new terminal** after setup:
+
+```text
+sgpt --version
+sgpt "Show the current directory"
+sgpt --shell "List files in the current directory"
+sgpt --repl lab "Help me inspect this machine"
+```
+
+Recognized inspection commands run automatically. Deletion, installation,
+scripts and other unrecognized commands ask for approval. The guard runs with
+your user's permissions; it is not an OS sandbox.
+
+## API key and reruns
+
+Enter the key at the setup prompt. Press Enter to retain the saved StepFun key.
+Keys are stored locally in `OPENAI_API_KEY` inside:
+
+| OS | Key file | Protection |
+|---|---|---|
+| Windows | `%USERPROFILE%\.config\shell_gpt\.sgptrc` | Current user/SYSTEM file permissions |
+| Linux | `~/.config/shell_gpt/.sgptrc` | File mode 600, directory 700 |
+
+These files contain plaintext credentials protected by OS permissions. Never
+commit them. ShellGPT is configured separately for each user. Rerunning setup
+refreshes the pinned installation and its managed settings; it retains a saved
+key only when its existing provider is recognized as StepFun. Back up custom
+settings before reinstalling. Live requests need Internet access and a valid
+StepFun key. Setup checks offline and does not call the paid API automatically.
+
+## Options for timed labs
+
+From the repository root on Windows:
+
+```powershell
+# ShellGPT only; no SSH changes or elevation required.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1 -SkipSsh
+
+# SSH only, without Python/ShellGPT.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1 -SkipShellGpt
+
+# Leave API-key entry for later.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1 -NoApiKeyPrompt
+```
+
+On Linux, append `--no-api-key-prompt` to skip key entry. To enter or replace
+it later, from the repository root run:
+
+```bash
+python3 ./universal/linux/prompt_api_key.py
+```
+
+For Windows without Git, copy only
+[Start-CehLab.ps1](universal/Start-CehLab.ps1) and run
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-CehLab.ps1` there.
+For Linux, copy the entire `universal/linux` folder and run its setup script.
+
+Universal setup does not hard-code the local lab's IP addresses, subnet,
+gateway or DNS. Windows SSH preserves networking and existing firewall rules;
+its own inbound rule permits any reachable client by default. Use
+`-AllowedClients CLIENT_IP_OR_CIDR` to narrow that rule. Other existing rules
+may still allow access. Downloads, administrator/sudo permissions and network
+reachability remain prerequisites. Setup does not create VMs or exercise roles.
+
+## More help
+
+- [Local Hyper-V lab: daily use, SSH keys, Parrot and Android](ceh-local-lab/README.md)
+- [Verified lab health and outstanding work](ceh-local-lab/HEALTH-REPORT.md)
+- [Windows source, recovery options and verification](universal/windows/README.md)
+- [Linux details and verification](universal/linux/README.md)
+
+Source lives under `universal/windows` and `universal/linux`. After changing
+Windows source, rebuild its portable launcher with
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Build-SingleFile.ps1`.

@@ -10,9 +10,8 @@ cd /path/to/ceh-lab-setup/universal/linux
 bash setup-shellgpt-parrot.sh
 ```
 
-Keep these five files together: `setup-shellgpt-parrot.sh`,
-`configure_shellgpt.py`, `linux_command_guard.py`, `test_linux_guard.py`,
-and `verify_shellgpt_parrot.py`. Setup needs Internet access and Python 3.10+.
+Keep this entire folder together, including its tests and API-key prompt helper.
+Setup needs Internet access and Python 3.10+.
 It uses sudo/apt only if Python or the virtual-environment prerequisite is
 missing. It installs ShellGPT 1.5.1, Typer 0.16.0 and Click 8.1.8 into:
 
@@ -38,7 +37,15 @@ REASONING_EFFORT=high
 OPENAI_USE_FUNCTIONS=true
 ```
 
-Save the StepFun key in `~/.config/shell_gpt/.sgptrc`:
+Setup prompts for the StepFun key with hidden input. Enter keeps the saved key.
+Use `--no-api-key-prompt` to skip it for noninteractive setup. To enter or replace
+the key later, from this folder run:
+
+```bash
+python3 ./prompt_api_key.py
+```
+
+The key is saved in `~/.config/shell_gpt/.sgptrc`:
 
 ```ini
 OPENAI_API_KEY=your-stepfun-api-key
@@ -90,7 +97,7 @@ Setup runs the command-policy suite and offline SDK/CLI checks automatically.
 To repeat offline checks without reinstalling:
 
 ```bash
-~/.local/share/shellgpt-stepfun/venv/bin/python -m unittest discover -s . -p test_linux_guard.py -v
+~/.local/share/shellgpt-stepfun/venv/bin/python -m unittest discover -s . -p 'test_*.py' -v
 ~/.local/share/shellgpt-stepfun/venv/bin/python ./verify_shellgpt_parrot.py --offline
 ```
 

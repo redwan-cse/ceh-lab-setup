@@ -2,8 +2,14 @@
 # Run as the user who will use sgpt, not as root. No API keys in this file.
 set -euo pipefail
 umask 077
+prompt_key=true
+case "${1:-}" in
+    '') [[ $# == 0 ]] || { echo 'Unexpected arguments.' >&2; exit 1; } ;;
+    --no-api-key-prompt) [[ $# == 1 ]] || { echo 'Unexpected arguments.' >&2; exit 1; }; prompt_key=false ;;
+    *) echo 'Usage: bash setup-shellgpt-parrot.sh [--no-api-key-prompt]' >&2; exit 1 ;;
+esac
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-for file in configure_shellgpt.py linux_command_guard.py test_linux_guard.py verify_shellgpt_parrot.py; do
+for file in configure_shellgpt.py linux_command_guard.py prompt_api_key.py test_linux_guard.py verify_shellgpt_parrot.py; do
     test -f "$script_dir/$file" || { echo "Missing setup file: $file" >&2; exit 1; }
 done
 if [[ "$(id -u)" == 0 ]]; then
@@ -35,6 +41,9 @@ fi
 "$venv/bin/python" "$script_dir/configure_shellgpt.py"
 "$venv/bin/python" -m unittest discover -s "$script_dir" -p 'test_*.py' -v
 "$venv/bin/python" "$script_dir/verify_shellgpt_parrot.py" --offline
+if "$prompt_key"; then
+    "$venv/bin/python" "$script_dir/prompt_api_key.py"
+fi
 echo 'Setup complete. Reconnect SSH or start a new shell to refresh PATH.'
 echo "API key: $HOME/.config/shell_gpt/.sgptrc (OPENAI_API_KEY=your-key)"
-echo 'After saving a key, verify live: ~/.local/share/shellgpt-stepfun/venv/bin/python verify_shellgpt_parrot.py --live'
+echo "After saving a key, verify live: $venv/bin/python \"$script_dir/verify_shellgpt_parrot.py\" --live"
