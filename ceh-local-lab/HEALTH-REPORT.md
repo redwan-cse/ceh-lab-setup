@@ -129,8 +129,17 @@ changes may reactivate scanning; verify before later sessions.
 All three Windows accounts mapped `T:` and passed directory-read and denied-
 file-creation checks using the dedicated non-admin `cehshare` identity. The
 share grants that account Read and administrators Full maintenance access.
-SMB encryption is required. Windows may ask for credentials after a later sign-in;
-an already-open desktop may need its own reconnect.
+SMB encryption is required. The later mounted-volume correction replaced the
+per-login mappings with persistent, machine-wide `New-SmbGlobalMapping` drives
+so Windows retains the connection credential. Fresh logins passed without a
+password prompt. Temporary interactive probes confirmed `T:` in This PC and
+20 readable folders in the actual Win11-Client desktop session 3 and both
+Administrator desktop sessions 2. The probes were removed afterward. The
+native mounted drive is available across local user sessions, with server-side
+read-only permissions preserved; it is a network drive, not a local block disk.
+The global-volume helper passed reruns on all three machines. Independent
+new SSH sessions then confirmed Status OK, encryption required, 20 folders and
+actual manifest-file reading without supplying another share credential.
 
 Parrot's unrelated full upgrade completed without interruption. `cifs-utils`
 was then installed and `/mnt/ceh-tools` mounted read-only with SMB 3.1.1, seal,

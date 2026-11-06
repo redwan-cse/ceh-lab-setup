@@ -205,7 +205,7 @@ Some relative paths are 259 characters long, so extraction must support long pat
 | Extracted library | `C:\CEH-Tools` inside that VM |
 | SMB share | `\\10.10.10.22\CEH-Tools` |
 | Guest access | Dedicated non-administrator `cehshare` account, read-only |
-| Windows drive | `T:` configured for Win11-Client and both server Administrator accounts |
+| Windows drive | `T:` persistent machine-wide mount on all three Windows VMs; visible under This PC |
 | Parrot mount | `/mnt/ceh-tools`, persistent, encrypted and read-only |
 | Android | Copy selected files from the same library through ADB; browsing SMB requires a compatible Android client |
 
@@ -255,20 +255,34 @@ preserved for inspection. Originals are never deleted. Verified copied ZIPs
 are removed from server staging after successful share publication.
 
 Once publication succeeds, copy `Connect-CehTools.ps1` to each Windows guest
-and run it there as the user who needs the drive:
+and run it there in **Administrator PowerShell**:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Connect-CehTools.ps1
 ```
 
-Enter `WIN-L4HLUP8AT8K\cehshare` and its password. The helper maps `T:`, verifies
-20 folders and checks that file creation is denied. `-DriveLetter` selects a
-different unused letter. The mapping is persistent; Windows may request the
-credential after a new sign-in. Save it in Windows Credential Manager if wanted.
-It refuses to replace another drive mapping. Drives configured through SSH
-may not appear in an already-open desktop session; reconnect/sign in or run
-the helper from that user's desktop terminal. The UNC path is always available
-with the share credentials.
+Enter `WIN-L4HLUP8AT8K\cehshare` and its password. The helper uses native
+`New-SmbGlobalMapping -Persistent $true -RequirePrivacy $true` to mount `T:`
+for all local sessions, including the desktop, and lets Windows retain the
+connection credential. The dedicated server account remains read-only for
+everyone using this mount. No plaintext password is saved in source files.
+
+The helper verifies 20 readable folders and denied file creation. `-DriveLetter`
+selects another unused letter. It refuses to replace an unrelated mapping or
+local disk. Old per-login mappings to this same library are replaced with the
+machine-wide mount. The mounted drive was verified inside all three existing
+desktop sessions and appeared in the **This PC** shell view. If an Explorer
+window was already open, refresh that window.
+
+For a fresh-session check, copy `Test-CehToolsVolume.ps1` to the guest and run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-CehToolsVolume.ps1
+```
+
+This checks the native global mapping, encryption, folder listing and actual
+manifest-file reading without another credential prompt. `-DesktopCheck`
+additionally checks This PC when run in the logged-in desktop session.
 
 Copy `mount-ceh-tools.sh` to Parrot and run after other package operations finish:
 
