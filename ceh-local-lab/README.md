@@ -149,6 +149,80 @@ then rewinds Android's disk/RAM. Preserve work and review the restore before
 using that flag. Do not restore automatically every session. Recovery details
 are in the [health report](HEALTH-REPORT.md).
 
+## Shared CEHv13 tools
+
+**Proposed setup, not yet deployed.** The host/server location is awaiting the
+user's choice. The recommended location is inside Server 2022, keeping the
+extracted course tools in the lab VM instead of the physical host.
+
+Source on Redwan-PC:
+
+```text
+D:\CEHv13\CEHv13_Tools_26-Nov-2025\
+```
+
+The 2026-11-06 inventory found 20 included ZIP archives: Lab Prerequisites and
+Modules 02–20. Exclude **exactly `CEHv13 ISO.zip`**. The included ZIPs occupy
+7.19 GiB and contain 49,052 entries totaling about 9.00 GiB after first-level
+extraction. This is archive metadata, not a claim that extraction has passed.
+The ZIP entries are not encrypted; embedded archives may have their own rules.
+Some relative paths are 259 characters long, so extraction must support long paths.
+
+### Recommended layout
+
+| Item | Proposed value |
+|---|---|
+| File server | Server 2022, `10.10.10.22`, hostname `WIN-L4HLUP8AT8K` |
+| Extracted library | `C:\CEH-Tools` inside that VM |
+| SMB share | `\\10.10.10.22\CEH-Tools` |
+| Guest access | Dedicated non-administrator `cehshare` account, read-only |
+| Windows drive | `T:` where available |
+| Parrot mount | `/mnt/ceh-tools`, read-only |
+| Android | Copy selected files from the same library through ADB; browsing SMB requires a compatible Android client |
+
+Server 2022 had about 43.7 GiB free at inspection, enough for the 7.19 GiB
+staging ZIPs plus the 9 GiB extracted library and some working headroom.
+Windows/Parrot users should copy tools into their own working directory before
+editing them. A read-only master library prevents one VM from changing the
+tools everyone else uses. A writable exchange share can be added separately
+if needed later.
+
+### Implementation sequence
+
+1. Recheck source archives, destination space and existing share/user names.
+   Refuse conflicts rather than replacing an unrelated folder or share.
+2. Transfer only the 20 included ZIPs to staging inside the chosen file server.
+   Preserve the originals on D: and keep course binaries out of this Git repo.
+3. Validate archive paths and extract into a new staging library using
+   long-path-aware handling. Preserve each module's existing top-level folder.
+   Do not recursively unpack embedded archives, execute tools or install them.
+4. Verify extracted file sizes and ZIP CRCs; report every failed, blocked or
+   quarantined file. Publish the library only after successful verification.
+   Preserve any existing library until its replacement passes.
+5. Create the dedicated share account with an interactively entered password,
+   stored only by Windows. Grant read access at both the NTFS and SMB layers;
+   administrators retain maintenance access. Keep SMB1 and guest access disabled.
+6. Verify the SMB service, authentication and firewall behavior. The Windows
+   guests' firewalls were previously disabled; adding a scoped allow rule alone
+   would not restrict access while the firewall is off. Any firewall enablement
+   must preserve working SSH and be checked immediately afterward.
+7. Connect Windows guests and Parrot, verify directory listing and file reads,
+   and confirm that the share account cannot create/delete files. Test Android
+   file delivery using `adb push` from Parrot's mounted library.
+8. Save a reusable deployment script and client connection commands under
+   `ceh-local-lab`, with no passwords or course files committed. A rerun should
+   verify existing state and skip already verified extraction work.
+
+Android ADB supports copying files, rather than automatically providing a
+Windows-style network drive. Example after the Parrot mount is configured:
+
+```bash
+adb -s 10.10.10.9:5555 push /mnt/ceh-tools/PATH_TO_FILE /sdcard/Download/
+```
+
+References: [Microsoft SMB share creation](https://learn.microsoft.com/en-us/powershell/module/smbshare/new-smbshare)
+and [Android ADB file transfer](https://developer.android.com/tools/adb#copyfiles).
+
 ## Original scripts and rebuild reference
 
 - `enable-ceh-ssh-windows-server.ps1`: original local installer; can assign
