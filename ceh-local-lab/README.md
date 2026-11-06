@@ -3,6 +3,10 @@
 This folder records the tested local environment and preserves the two original
 working SSH scripts. For another network, use ../universal instead.
 
+Start with the [beginner guide](BEGINNER-GUIDE.md) and [current health report](HEALTH-REPORT.md).
+The [Gemini reference](reference/README.md) records the supplied original guide
+and explains corrections made after inspecting the real machines.
+
 | Host | User | Verified system |
 |---|---|---|
 | 10.10.10.11 | Win11-Client | Windows 11 |
@@ -27,5 +31,21 @@ reasoning effort and selective command approval. Its original clean reinstall
 behavior resets configuration and keys; read its instructions before rerunning.
 The generic Linux version under ../universal/linux was also tested on Parrot.
 
-No passwords, API keys or private SSH keys are included. The future Gemini
-conversation summary belongs in conversation-summary.md after the user supplies it.
+The Windows guests are currently standalone WORKGROUP machines. AD/DNS and the
+planned web/FTP/SQL roles need separate provisioning. The standalone resolver
+pair is 8.8.8.8 and 1.1.1.1; do not use .19 as a DNS server until it actually runs DNS.
+
+Useful maintenance tools:
+
+- `Test-CehLab.ps1`: read-only host inventory and network checks.
+- `Get-HostLabState.ps1`: elevated Hyper-V snapshot; `-KeepAwakeOnAC` additionally
+  disables automatic host sleep/hibernation on AC, leaving battery/display settings alone.
+- `keep-parrot-awake.sh`: apply persistent guest sleep/hibernate blocking on Parrot;
+  `--check` verifies the masks without changes.
+- `disable-unused-parrot-services.sh`: local static-address VM only; disables
+  only the four named optional services if currently failed, without uninstalling tools.
+- `Set-StandaloneLabDns.ps1`: known local workgroup guests only; refuses domain
+  members/DCs and active DNS servers before setting public resolvers.
+
+No passwords, API keys or private SSH keys are included. The supplied guide and
+reviewed [conversation summary](conversation-summary.md) are now included.

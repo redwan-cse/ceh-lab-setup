@@ -2,6 +2,10 @@
 
 SSH and StepFun ShellGPT setup kits for an authorized CEH lab.
 
+**New to the project? Read the [beginner guide](ceh-local-lab/BEGINNER-GUIDE.md).**
+It explains which computer to type on, starting the existing VMs, building a
+lab, SSH, ShellGPT, Android recovery and basic troubleshooting.
+
 | Folder | Purpose |
 |---|---|
 | [ceh-local-lab](ceh-local-lab/README.md) | Proven local scripts, known hosts and setup notes. Includes the two original SSH scripts unchanged. |
@@ -23,6 +27,19 @@ The generic SSH setup preserves the target's network configuration. A different
 IP/subnet is supported; network reachability, permissions and download access
 are prerequisites. The universal README explains firewall scope and limitations.
 
-Passwords, API keys, private keys, runtime configs and logs are excluded.
-The user's future Gemini summary can be added under ceh-local-lab after removing
-credentials. No unsupplied conversation summary has been invented.
+For a read-only local check from the Hyper-V host:
+
+```powershell
+.\ceh-local-lab\Test-CehLab.ps1
+```
+
+Run it in Administrator PowerShell for Hyper-V inventory, or add `-SkipHyperV`
+for network checks without elevation. Read the [latest health report](ceh-local-lab/HEALTH-REPORT.md)
+for verified results and outstanding items; an open port alone is not a full
+application-health test.
+
+Passwords, API keys, private keys, runtime configs and raw logs are excluded.
+The supplied Gemini guide is preserved with [provenance and corrections](ceh-local-lab/reference/README.md),
+and the [setup summary](ceh-local-lab/conversation-summary.md) connects it to the
+tested project. The archived guide is historical reference, not the default
+script to run on a new machine.
