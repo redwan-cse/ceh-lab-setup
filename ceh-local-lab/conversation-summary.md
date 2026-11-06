@@ -31,18 +31,25 @@ controllers rather than applying standalone DNS settings to them.
 
 Parrot uses KDE Plasma/Wayland. The local keep-awake script was applied and
 verified: all five sleep/hibernate targets are persistently masked, with
-additional logind/sleep drop-ins. The physical host's observed AC sleep timeout
-was still five hours, with AC hibernation disabled. Host UAC elevation was
-canceled; no host power change or administrator Hyper-V inventory was completed.
-NAT and the host gateway exist, but current VM power states and switch membership
-remain unverified. The prepared host audit must be run from a fresh elevated
-PowerShell on physical host `Redwan-PC`, not from a guest SSH prompt. The `J:`
-repository path belongs to the host.
+additional logind/sleep drop-ins. The user completed the elevated host audit on
+physical `Redwan-PC`: all five CEH VMs were Running on the Internal
+`CEH-Lab-Switch`, with active NAT for `10.10.10.0/24`. Host AC sleep and
+hibernation timeouts are now both Never. Battery and display settings were left
+alone. The `J:` repository path belongs to the physical host, not the guests.
 
-Android's expected `.9` address did not answer ARP, ping or ADB TCP checks.
-Parrot discovery saw the host plus `.11`, `.13`, `.19` and `.22`; ADB reported
-no route to `.9`. Android's VM state/console and its root-console networking/ADB
-procedure were not verified or changed. This is not proof that the VM is off.
+Android initially did not answer at `.9` despite its running VM and correct
+switch. With explicit approval, the user ran the recovery helper: it preserved
+current state in a new checkpoint and restored the existing ADB checkpoint.
+Host TCP/5555 and actual ADB connection, device listing and shell checks from
+Parrot then passed. Android 8.1.0 reported wifi_eth `10.10.10.9/24`, gateway
+`10.10.10.1` and ADB port 5555. See [Android details](ANDROID-ADB.md).
+
+The additional Parrot account `attacker` was created with the requested password
+entered privately, sudo-group membership and the host's public SSH key. Key
+login, password login and password-authenticated sudo were tested successfully.
+Password SSH remains enabled; no passwordless-sudo rule was added. The original
+redwan account's per-user ShellGPT configuration was not copied to attacker.
+See [account instructions](PARROT-ACCOUNTS.md) and its reusable helper.
 
 All four SSH-accessible guests passed fresh ShellGPT text, shell-command and
 tool-round-trip API tests. Windows 11's guarded installer update preserved its

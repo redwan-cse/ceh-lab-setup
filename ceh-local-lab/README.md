@@ -12,7 +12,8 @@ and explains corrections made after inspecting the real machines.
 | 10.10.10.11 | Win11-Client | Windows 11 |
 | 10.10.10.19 | Administrator | Windows Server 2019 Standard |
 | 10.10.10.22 | Administrator | Windows Server 2022 Standard |
-| 10.10.10.13 | redwan | Parrot Security 7.4 |
+| 10.10.10.13 | redwan / attacker | Parrot Security 7.4; attacker has tested sudo and key/password SSH |
+| 10.10.10.9 | Android root console / ADB | Android-8.1-Target, Mobile Target (ADB), verified TCP/5555 |
 
 `enable-ceh-ssh-windows-server.ps1` contains the local 10.10.10.0/24 settings
 and can assign 10.10.10.19 when its expected subnet is absent. Treat it as a
@@ -37,6 +38,9 @@ pair is 8.8.8.8 and 1.1.1.1; do not use .19 as a DNS server until it actually ru
 
 Useful maintenance tools:
 
+- [Android ADB guide](ANDROID-ADB.md): verified mobile target and checkpoint recovery.
+- [Parrot accounts](PARROT-ACCOUNTS.md): attacker sudo/key access and reusable
+  `Create-ParrotAttacker.sh` helper with an interactive password prompt.
 - `Test-CehLab.ps1`: read-only host inventory and network checks.
 - `Get-HostLabState.ps1`: elevated Hyper-V snapshot; `-KeepAwakeOnAC` additionally
   disables automatic host sleep/hibernation on AC, leaving battery/display settings alone.

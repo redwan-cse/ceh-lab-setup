@@ -27,10 +27,10 @@ administrator**, and confirm `hostname` reports `Redwan-PC`.
 
 ## 2. Understand this lab's addresses
 
-The expected design uses `CEH-Lab-Switch`, an **Internal** Hyper-V switch; each
-guest should attach to it. The host gateway and NAT are present, but current VM
-switch membership and power states still need an elevated host inventory.
-In this design, guests connect to each other and the host
+The completed administrator host audit confirmed all five CEH VMs **Running**
+and **Operating normally**, with all five network adapters attached to
+`CEH-Lab-Switch`, an **Internal** switch. The host gateway and active NAT for
+`10.10.10.0/24` are present. Guests connect to each other and the host
 without being attached directly to the physical LAN. NAT is not a complete
 security boundary: the host and outgoing destinations remain reachable. See
 [Microsoft's NAT guide](https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/setup-nat-network).
@@ -38,9 +38,9 @@ security boundary: the host and outgoing destinations remain reachable. See
 | Machine | Address | Purpose / current limitation |
 |---|---|---|
 | Physical Windows host | `10.10.10.1` | Lab gateway; not a guest |
-| Android-8.1-Target | `10.10.10.9` | Intended ADB target; verify port 5555 before use |
+| Android-8.1-Target | `10.10.10.9` | Mobile Target (ADB); Android 8.1.0, TCP/5555 and ADB shell verified |
 | Win11-Client | `10.10.10.11` | Windows workstation target |
-| Parrot Security | `10.10.10.13` | Linux practice workstation |
+| Parrot Security | `10.10.10.13` | Linux workstation; redwan plus the new attacker sudo user |
 | WinServer-2019 | `10.10.10.19` | Standalone WORKGROUP server; AD/DNS are not installed |
 | WinServer-2022 | `10.10.10.22` | Standalone WORKGROUP server; IIS/FTP are not installed |
 
@@ -54,7 +54,7 @@ flowchart TB
     H --- S["CEH-Lab-Switch — Internal"]
     S --- P["Parrot .13"]
     S --- W["Windows 11 .11"]
-    S --- A["Android .9 — connectivity pending"]
+    S --- A["Android .9 — Mobile Target (ADB)"]
     S --- N["Server 2019 .19"]
     S --- T["Server 2022 .22"]
 ```
@@ -84,9 +84,9 @@ Skip installation and network setup when the VMs already exist.
 
 1. Plug in the host and keep it awake throughout the session. A guest cannot
    keep running normally while the physical host sleeps or hibernates.
-   The last observed host AC sleep timeout was **5 hours**; AC hibernation was
-   disabled. A UAC elevation attempt was canceled, so the review did not change
-   host power settings or complete the administrator Hyper-V inventory.
+   The user completed the administrator host audit and changed AC sleep and
+   hibernation to **Never**, verified with `powercfg`. The battery sleep timeout
+   remains **10 minutes**. Keep the host on AC power for longer sessions.
 2. Open **Hyper-V Manager** on the host. Start Parrot and only the targets you
    need. Choose **Connect** if you need a VM's local screen.
 3. In **Settings → Network Adapter**, confirm each VM uses `CEH-Lab-Switch`.
@@ -145,8 +145,14 @@ cd J:\MyProjects\ceh-lab-setup
 ```
 
 Omit `-KeepAwakeOnAC` for inventory only. Do not run it from a guest SSH prompt.
-The command is prepared for the user to run; successful host elevation and
-resulting power settings have not yet been verified.
+The user successfully ran this command on the physical host. It reported
+`PowerChanged: true`; AC sleep and hibernation were verified as `0` (Never).
+An earlier canceled UAC attempt did not complete these checks, but the later
+elevated run did. The host has 64 GiB RAM, with about 18 GiB free at that audit.
+
+The audit confirmed Android is Generation 1 with 2 CPUs and 2 GiB RAM; Parrot is
+Generation 2 with 4 CPUs and 8 GiB RAM; the three Windows VMs are Generation 2
+with 4 CPUs and 4 GiB RAM each. An unrelated Ubuntu VM is outside this guide.
 
 ## 4. Prepare a new Windows target with one file
 
@@ -370,6 +376,24 @@ For Android, take a known-working checkpoint only after `adb connect` and
 `adb shell` succeed. Do not automatically restore an old checkpoint at each
 session without checking whether you need to preserve later changes.
 
+The host audit found a Standard checkpoint named
+`Android-8.1-Target - adb - (11/5/2026 - 8:06:13 PM)`. Its name alone does not
+prove ADB will work after restoring it. The local
+[Android checkpoint helper](Restore-AndroidAdbCheckpoint.ps1) inspects only by
+default. Run inspection in Administrator PowerShell on Redwan-PC:
+
+```powershell
+cd J:\MyProjects\ceh-lab-setup
+.\ceh-local-lab\Restore-AndroidAdbCheckpoint.ps1
+```
+
+The optional `-RestoreAdbCheckpoint` flag creates a new current-state checkpoint
+first, then rewinds Android's disk and RAM to the older checkpoint. Review and
+approve that change before running it; save important files elsewhere. A backup
+checkpoint helps rollback but is not a guarantee against data loss. The user
+approved and completed this recovery: the backup was created and actual ADB
+access was verified. See the [Android ADB guide](ANDROID-ADB.md).
+
 ## 8. Fix the first failing layer
 
 | Symptom | First checks |
@@ -395,12 +419,16 @@ adb shell
 During review, the expected Android address `.9` did not answer ARP, ping or
 TCP/5555 checks. Parrot's subnet discovery found only `.1`, `.11`, `.13`, `.19`
 and `.22`; `adb connect` reported no route to `.9`. This does not establish
-whether the Android VM is off, disconnected or configured with another address.
-Its Hyper-V state and local console still need an elevated host check. The
-Android root-console network/ADB commands were not executed or verified in this
-review. Treat Android practice as pending until a connection succeeds.
+why Android was unreachable. The host audit confirmed its VM was running on
+the correct switch. Approved checkpoint recovery restored connectivity; ADB
+now reports `device`, and its shell confirmed Android 8.1.0, wifi_eth
+10.10.10.9/24, gateway 10.10.10.1 and TCP/5555. Recheck after a guest reboot.
 
 The VMs' UTC clocks agreed during review; the Windows Pacific time-zone display
 alone did not mean clock drift. Windows 11 and Server 2019 reported a pending
-reboot; no reboot was performed. Save work and plan reboots before relying on
+reboot; neither Windows guest was rebooted. Save work and plan reboots before relying on
 pending updates. A setup script or scan does not prove every lab service works.
+
+Parrot's four failed unused boot-service autostarts were cleaned up; the later
+check reported zero failed units. The tools remain installed. This does not
+provision Wi-Fi hardware, DHCP, AD or other exercise services.

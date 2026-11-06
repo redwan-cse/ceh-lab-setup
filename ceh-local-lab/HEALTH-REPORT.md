@@ -5,12 +5,12 @@ It does not claim that every optional CEH service has been provisioned.
 
 | Machine | Verified working | Remaining limits |
 |---|---|---|
-| Windows host `.1` | `10.10.10.1/24` on the lab vEthernet adapter; `CEH-Lab-NAT` for `10.10.10.0/24`; guest Internet works | Elevated Hyper-V inventory and host AC sleep change await the host-only command below |
+| Windows host `.1` | All 5 CEH VMs Running on the verified Internal switch; active NAT; host AC sleep/hibernate set to Never | Keep the host powered on; battery settings were not changed |
 | Windows 11 `.11` | Static IP/gateway, corrected DNS, SSH key login, password/public-key SSH enabled, SMB2/445, ShellGPT high reasoning; 11 offline and 3 live checks passed | WORKGROUP; pending Windows servicing reboot; RDP not listening |
-| Parrot `.13` | Static IP/gateway/DNS, SSH, synchronized UTC time, 3 live ShellGPT checks; all 5 sleep/hibernate targets persistently masked | Optional wireless/DHCP/multiplexer/CPU-tuning boot services require exercise-specific setup; physical host must remain awake |
+| Parrot `.13` | Static IP/gateway/DNS, SSH, UTC time, 3 live ShellGPT checks, 5 sleep targets masked; attacker account with tested sudo/password/key SSH | Optional tools need exercise-specific setup; ShellGPT remains per-user for redwan |
 | Server 2019 `.19` | Static IP/gateway/DNS, SSH key login, both SSH auth methods, SMB2/445, 3 live ShellGPT checks | WORKGROUP; AD DS/DNS not installed; pending servicing reboot; RDP not listening |
 | Server 2022 `.22` | Static IP/gateway, corrected DNS, SSH key login, both SSH auth methods, SMB2/445, authorized key configured, 3 live ShellGPT checks | WORKGROUP; IIS/FTP/DNS/SQL services not provisioned; RDP not listening |
-| Android `.9` | No successful network/ADB check at its expected address | No ARP, ping or TCP/5555 response from the lab; ADB reports no route. VM power state and console configuration need host-side inspection |
+| Android `.9` | Android-8.1-Target, Mobile Target (ADB), Android 8.1.0; ADB device online; wifi_eth 10.10.10.9/24, gateway .1, DNS 8.8.8.8, TCP/5555 | Recovered using the ADB checkpoint after preserving current state; recheck after reboot |
 
 ## Repairs made
 
@@ -36,14 +36,20 @@ All four configured ShellGPT guests passed live text, automatic inspection
 shell execution and automatic tool-call continuation with step-5-preview/high.
 No credentials or raw logs are included in this report.
 
-## Complete the host check on the physical PC
+## Completed host check on the physical PC
 
-The automation session lacked Hyper-V administrator rights. Its elevation attempt
-was canceled, so **no host power setting was changed**. The last observed host
-AC sleep timeout was 18,000 seconds (5 hours); AC hibernation timeout was 0.
-Parrot's guest masks cannot prevent physical-host sleep.
+The initial automation session lacked Hyper-V administrator rights. The user
+then ran the audit successfully on physical Redwan-PC. All five CEH VMs were
+Running/Operating normally on the actual Internal CEH-Lab-Switch; NAT was active
+for 10.10.10.0/24. Host AC sleep and hibernation are now **0 (Never)**, rechecked
+with powercfg. Battery sleep remains 10 minutes; display settings are unchanged.
 
-Open a **new Windows PowerShell window from the physical host's Start menu**
+Android has 2 vCPUs/2 GiB RAM (Generation 1); Parrot has 4 vCPUs/8 GiB
+(Generation 2); each Windows guest has 4 vCPUs/4 GiB (Generation 2).
+An unrelated UbuntuServerPro VM was Off on External Bridge and was left alone.
+The host had approximately 64 GiB RAM with 18 GiB free at collection.
+
+To repeat it, open a **new Windows PowerShell window from the physical host's Start menu**
 using **Run as administrator**. Run `hostname`: it must say `Redwan-PC`.
 The `J:` project path is on that host and will not exist inside an SSH-connected
 Windows VM just because the terminal application itself is on the host.
@@ -64,12 +70,16 @@ Then repeat the regular checker:
 
 ## Android and optional roles
 
-The guest network scan found `.1`, `.11`, `.13`, `.19` and `.22`; `.9` was absent.
-That does not prove the Android VM is powered off. Check its Hyper-V state,
-internal-switch attachment and local Android root console. The supplied image's
-manual IP/ADB settings may have been lost after reboot. Follow the
-[beginner guide](BEGINNER-GUIDE.md) and verify ADB before taking a new working
-checkpoint. Do not restore an old checkpoint without considering later changes.
+Initially `.9` was absent even though Hyper-V confirmed Android was running
+on the correct switch. After explicit user approval, the recovery helper saved
+current state as `before-adb-recovery-20261106-135746-13dca2`, then restored the
+existing ADB checkpoint. Host TCP/5555 and actual ADB shell checks from Parrot
+now pass. See [Android ADB](ANDROID-ADB.md). No other guest was restored.
+
+The new attacker user on Parrot has sudo membership and this host's public key.
+Password SSH, key-only SSH and password-authenticated sudo were tested. Its
+.ssh/key file are attacker-owned with modes 700/600. Password login stays enabled.
+No password or private key is stored in the repository.
 
 The source guide's domain-controller/web/FTP/SQL labels were plans, not service
 installation steps. No domain join or new server roles were performed during
@@ -79,8 +89,9 @@ domain, service and credential requirements.
 Current guest Windows firewalls are disabled, matching the historical lab setup.
 They were not toggled during this audit. This is not a recommendation to disable
 firewalls on a general-purpose or externally connected machine. The intended
-internal-switch membership still needs the elevated Hyper-V check.
+internal-switch membership was confirmed by the elevated audit.
 
 Windows guests use a Pacific display time zone, while Parrot/host use Dhaka.
 Their UTC clocks matched during checks; differing displayed dates were not clock
-drift. No VM was rebooted or checkpoint-restored during the audit.
+drift. Android was restored only after approval and a current-state checkpoint;
+the Windows guests and Parrot were not rebooted or checkpoint-restored.

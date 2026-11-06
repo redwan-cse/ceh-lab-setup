@@ -30,13 +30,12 @@ Known differences found during the 2026-11-06 review:
 - The Android Generation 1 instructions describe this particular image and
   procedure. ADB reachability must be checked. Applying a checkpoint reverts
   changes and can discard work.
-- Android's expected `.9` address did not answer ARP, ping or TCP/5555 checks
-  during review. Its VM state and console were not inspected, so its power
-  state is unknown. The supplied Android root-console procedure was not run.
-- The host gateway/NAT were found, but UAC elevation was canceled. Current VM
-  switch membership and power states still require an administrator host check.
-  Host AC sleep remained five hours; Parrot's five sleep/hibernate targets were
-  successfully masked with the maintained local keep-awake script.
+- Android initially had no reachable `.9` address. The subsequent approved
+  checkpoint recovery preserved current state first and restored working ADB.
+  TCP/5555 and actual ADB shell/network checks passed; see [Android](../ANDROID-ADB.md).
+- The user completed the elevated physical-host audit: all five CEH VMs were
+  Running on the Internal lab switch with active NAT. Host AC sleep/hibernation
+  are now Never, and Parrot's five sleep/hibernate targets are persistently masked.
 - Windows 11/Server 2022 backup DNS was corrected from `.19` to `1.1.1.1`,
   alongside `8.8.8.8`. All four SSH-accessible guests passed fresh ShellGPT
   API checks; this does not establish availability of every planned lab role.
