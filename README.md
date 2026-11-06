@@ -1,4 +1,4 @@
-# CEH Lab Setup
+# ceh-lab-setup
 
 SSH and StepFun ShellGPT setup kits for an authorized CEH lab.
 

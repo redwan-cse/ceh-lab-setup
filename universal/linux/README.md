@@ -6,7 +6,7 @@ target IP address, subnet or login user and are separate from the Windows instal
 Copy this folder to the target, SSH in as the normal user, then run:
 
 ```bash
-cd /path/to/CEH-Lab-Setup/universal/linux
+cd /path/to/ceh-lab-setup/universal/linux
 bash setup-shellgpt-parrot.sh
 ```
 
