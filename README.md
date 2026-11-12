@@ -4,6 +4,11 @@ One `sgpt` command for CEH Practical preparation. Fresh exam installs use
 OpenRouter `deepseek/deepseek-v4.1-flash-1017`; StepFun `step-5-preview` is a
 manual alternative and our local-practice choice. There is no automatic fallback.
 
+Assigned lab targets can include public websites. Passive public sources and
+ordinary public-page/DNS lookups are allowed; sgpt reuses the URL/domain already
+provided for the task. A private CIDR or local initialization is not required
+for public research. See the [exam scope guide](exam/README.md#initialize-and-inspect-safely).
+
 - [Exam: Parrot](#exam-parrot)
 - [Exam: Windows](#exam-windows)
 - [Exam: Android target](#exam-android-target)

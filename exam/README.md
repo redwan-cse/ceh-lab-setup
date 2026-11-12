@@ -202,10 +202,20 @@ not scan neighbors or infer their OS/online status. Missing tools, API quota,
 Internet access or permissions can stop work; failures are reported and
 collected evidence is retained.
 
-The working scope is the machines/resources assigned to your CEH lab session.
+The working scope includes the machines, services and websites assigned to
+your CEH lab session, including public URLs/domains.
 You do not need to repeat an authorization statement or provide a tools root
 for each task. If a network operation needs an unknown target/range, provide
-the assigned IP/CIDR in chat. This does not authorize unrelated Internet assets.
+the assigned URL/domain/IP/range in chat. Reuse a target already supplied in
+the task; no second scope confirmation is needed for routine read-only work.
+
+Passive public sources (search results, WHOIS/RDAP, certificate transparency,
+passive DNS and public documents) are allowed. Ordinary public-page/header
+retrieval and normal DNS queries are also allowed; these make network requests.
+They do not require a private CIDR, lab-only DNS, or initialization first.
+The local-only startup collector does not limit later research to local hosts.
+Active tests remain limited to the assigned task targets; passive-source
+permission does not expand them to unrelated or discovered infrastructure.
 
 ## Normal chat, optional paths and scripts
 

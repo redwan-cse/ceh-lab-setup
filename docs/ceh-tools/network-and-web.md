@@ -1,11 +1,36 @@
 # Network and web tasks (Parrot)
 
-Use only the targets and CIDR explicitly assigned to your lab. `TARGET`,
+For active tests, use the targets or CIDR assigned to your lab, including
+public lab websites. Public-source research and ordinary public-page/DNS
+lookups do not need a private network range. `TARGET`,
 `AUTHORIZED_CIDR`, `DNS_SERVER`, `LAB_NAME`, `LAB_USER`, and `BASE_DN` are
 placeholders: replace them before running a command. The audit ran none of
 these probes. See [availability](inventory-linux.md) before choosing a tool.
 When using ShellGPT, submit each command through its existing guarded execution
 flow and approve when requested; retain the current approval policy.
+
+## Passive sources and public website research
+
+Reuse the URL/domain supplied in the task; no extra scope confirmation, CIDR,
+initialization or lab-only DNS is needed for this read-only work. Use available
+public search results, WHOIS/RDAP, certificate-transparency, passive DNS and
+public documents. Ordinary page retrieval and normal DNS queries make network
+requests, although they are not vulnerability scans or login attempts.
+
+```bash
+curl --head --max-time 15 'https://TARGET/'
+curl --max-time 20 --output "$CEH_EXAM_DIR/homepage.html" 'https://TARGET/'
+dig TARGET MX +noall +answer
+dig TARGET TXT +noall +answer
+```
+
+Check the actual response, then inspect relevant public contact/about pages or
+links. Preserve source URLs and retrieved evidence in the exam folder. Verify
+any email/answer against returned content rather than guessing. Public lookup
+permission does not make port scans, directory brute force, DNS brute force,
+login attempts or exploitation passive. Keep active tests on assigned task
+targets. Windows alternatives include `Invoke-WebRequest -UseBasicParsing`
+with `-OutFile` inside `$env:CEH_EXAM_DIR` and `Resolve-DnsName`.
 
 ## Find hosts, then inspect selected services
 
@@ -33,6 +58,10 @@ nslookup LAB_NAME DNS_SERVER
 Use the assigned DNS service, not an arbitrary VM. `NXDOMAIN` means the queried
 name was not found; a timeout points to server/connectivity problems.
 [BIND command manuals](https://bind9.readthedocs.io/en/stable/manpages.html).
+
+The explicit `DNS_SERVER` examples above apply to internal lab names. Public
+domain research can use the configured resolver as shown in the public-source
+workflow; a lab DNS address is not mandatory for it.
 
 ## List SMB shares and LDAP naming contexts
 
@@ -63,7 +92,8 @@ whatweb --aggression=1 'http://TARGET/'
 
 Headers and WhatWeb fingerprints can suggest server/CMS versions. They may be
 hidden, stale, or misleading. WhatWeb level 1 fetches the page and can follow
-redirects; confirm any redirected host is also in scope before proceeding.
+redirects. Inspect the destination: ordinary public-page retrieval is allowed,
+but a redirect does not extend active-testing scope to that host.
 Prefer HTTPS when available and keep certificate verification enabled.
 Telnet is absent on this Parrot account; use the installed HTTP tools for this
 task. [curl](https://curl.se/docs/manpage.html),

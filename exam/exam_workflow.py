@@ -96,7 +96,7 @@ def find_reference(query):
             guide=path.name!='README.md' and not path.name.startswith('inventory')
             if score:matches.append((score+(10 if guide else 0),path.name,section))
     if not matches:return 'No reference match. Ask for the tool/version or its official documentation; do not invent syntax.'
-    output='Reference excerpts (guidance, not execution evidence). Verify installed tool, path, version and authorized scope before use.\n'
+    output='Reference excerpts (guidance, not execution evidence). Verify tool/path/version and reuse the task target already supplied. Passive public sources and ordinary public-page/DNS lookups are allowed; ask only for genuinely missing target details.\n'
     for score,name,section in sorted(matches,key=lambda item:(-item[0],item[1]))[:3]:
         available=5000-len(output)
         if available<100:break
@@ -377,8 +377,8 @@ class Workflow:
     def context(self):
         path=self.state/'network-info.json'
         data=self.network_data()
-        if not data:return 'Working scope: machines assigned to the current CEH lab. Local facts have not been collected yet; initialize when requested. Custom tool paths are optional; prefer installed commands and relevant Desktop files. Obtain an actual assigned IP/range only when a network task needs it.'
+        if not data:return 'Working scope: assigned CEH lab machines/services, including public URLs/domains. Passive public sources and ordinary public-page/DNS lookups are allowed. Reuse the supplied task target; no CIDR or initialization is required for public research. Local facts have not been collected yet; initialize when requested. Custom tool paths are optional.'
         # Never attach the full network dump or tool catalog to paid requests.
-        summary=dict(host=data.get('host'),local_ipv4=data.get('local_ipv4',[]),working_scope='Machines/resources assigned to this CEH lab session',known_lab_range=data.get('scope'),optional_tools_root=data.get('tools_root'),
+        summary=dict(working_scope='Assigned CEH lab machines/services, including public URLs/domains',public_research='Passive public sources and ordinary public-page/DNS lookups allowed; reuse the supplied target, no CIDR needed',host=data.get('host'),local_ipv4=data.get('local_ipv4',[]),known_lab_range=data.get('scope'),optional_tools_root=data.get('tools_root'),
                      observed_hosts=data.get('observed_hosts',[])[:8],observations_time=data.get('discovered_at'),details_file=str(path))
         return json.dumps(summary,ensure_ascii=False)[:1000]
