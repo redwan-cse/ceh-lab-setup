@@ -12,7 +12,7 @@ import venv
 
 def windows_acl(path, directory=False):
     import json
-    code=r'''$ErrorActionPreference='Stop'; $r=[Console]::In.ReadToEnd()|ConvertFrom-Json
+    code=r'''$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $env:PSModulePath=Join-Path $PSHOME 'Modules'; $r=[Console]::In.ReadToEnd()|ConvertFrom-Json
 $user=[Security.Principal.WindowsIdentity]::GetCurrent().User
 if($r.directory){$acl=New-Object Security.AccessControl.DirectorySecurity}else{$acl=New-Object Security.AccessControl.FileSecurity}
 $acl.SetAccessRuleProtection($true,$false)
@@ -21,11 +21,11 @@ foreach($sid in @($user,(New-Object Security.Principal.SecurityIdentifier('S-1-5
  else{$rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow')}
  $acl.AddAccessRule($rule)
 }
-Set-Acl -LiteralPath $r.path -AclObject $acl'''
+if($r.directory){[IO.Directory]::SetAccessControl($r.path,$acl)}else{[IO.File]::SetAccessControl($r.path,$acl)}'''
     import base64
     powershell=Path(os.environ['SystemRoot'])/'System32'/'WindowsPowerShell'/'v1.0'/'powershell.exe'
     subprocess.run([str(powershell),'-NoProfile','-EncodedCommand',base64.b64encode(code.encode('utf-16-le')).decode()],
-                   input=json.dumps(dict(path=str(path),directory=directory)),text=True,check=True)
+                   input=json.dumps(dict(path=str(path),directory=directory)),text=True,check=True,capture_output=True)
 
 BASE='https://generativelanguage.googleapis.com/v1beta/openai/'
 MODEL='gemini-4-carbon'
@@ -150,6 +150,8 @@ class Function(BaseModel):
     text=text[:start]+'    if shell and interaction:\n        run_command(full_completion)\n'+text[end:]
     compile(text,str(app),'exec');app.write_text(text,encoding='utf-8')
     runtime=ROOT/'exam_runtime.py';shutil.copyfile(resources/'exam_runtime.py',runtime)
+    for name in ('exam_workflow.py','LAB-RULES.md','setup_exam.py'):
+        if (resources/name).resolve()!=(ROOT/name).resolve():shutil.copyfile(resources/name,ROOT/name)
     bin_dir=ROOT/'bin' if os.name=='nt' else Path.home()/'.local'/'bin'
     bin_dir.mkdir(parents=True,exist_ok=True)
     if os.name=='nt':

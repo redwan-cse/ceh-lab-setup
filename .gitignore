@@ -23,6 +23,7 @@
 **/credentials
 **/CEH-Tools/
 **/CEH-Tools-Staging/
+**/CEH-Exam/
 **/ceh-tools-deployment/
 **/*.pem
 **/*.pfx

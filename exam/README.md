@@ -97,6 +97,100 @@ and thought signatures survive continuation. Output appears after each model
 response, rather than streaming token by token. REPL requests retain their
 conversation history; completion caching is intentionally disabled by the adapter.
 
+## Desktop logs, findings and lab initialization
+
+Every command executed through the exam `sgpt` guard (including `--shell`)
+is recorded under **Desktop → CEH-Exam → machine hostname**. Private report
+files remain local and are ignored by Git:
+
+| File | Contents |
+|---|---|
+| `terminal.txt` | Text printed by sgpt, with real line breaks and ANSI color codes removed |
+| `commands.txt` | Readable commands and returned output, including exit status/refusals |
+| `commands.log` | Structured command evidence for verification and reuse |
+| `findings.txt` | Only `Flag:` and `How found:` for each confirmed result |
+| `network-info.txt` | Readable local addresses, routes, cached neighbors and any explicitly requested discovery |
+| `init-review.txt` | The short model review of the collector output, plus API usage if returned |
+| `network-info.json`, `tool-index.json` | Machine-readable context and filenames; not pasted wholesale into paid requests |
+
+Initialize with either command:
+
+```text
+sgpt "init the machine"
+sgpt --init-lab
+```
+
+Local scripts collect the facts first. Then **one** Google request checks a
+compact summary for failures, missing fields or inconsistencies. That review
+uses low reasoning, at most 5,000 characters of input facts and 1,536 completion
+tokens, a 90-second timeout, and no retries or execution tools. This bounds
+cost, but is not a fixed price. Missing API access does not lose local results.
+The review is advisory: it cannot prove discovery is complete or correct.
+Normal task requests keep their configured high reasoning.
+
+For collection with **no API call**, use:
+
+```text
+sgpt --init-lab --local-only
+```
+
+To index available course tools, add the actual mounted/local directory:
+
+```powershell
+sgpt --init-lab --tools-path T:\
+```
+
+```bash
+sgpt --init-lab --tools-path /mnt/ceh-tools
+```
+
+On the current Server 2022 VM, the local library path `C:\CEH-Tools` is also
+available and avoids relying on an SMB connection. On another exam machine,
+supply its actual path. Indexing lists filenames; it never executes the tools.
+
+Initialization does **not** automatically scan every connected network. If the
+exam explicitly authorizes a target range, supply it yourself (example only):
+
+```text
+sgpt --init-lab --scope 10.10.10.0/24 --discover
+```
+
+The explicit range is limited to IPv4 /24 or smaller. The collector probes TCP
+22, 80, 443, 445, 3389 and 5555 inside that range only. Cached neighbors and past
+observations are not proof of current reachability; timeouts do not prove a
+machine is offline. Discovery does not authorize subsequent attacks.
+
+Rules are saved in [LAB-RULES.md](LAB-RULES.md) and installed beside the exam
+runtime. A compact, capped context summary accompanies later requests, rather
+than the full network dump or tools index. Ask, for example:
+
+```text
+sgpt "Find the installed email-header analysis tool. Give its verified path and the manual steps. Tell me which results you need back."
+sgpt "I found flag FLAG_VALUE in the GUI using these steps: ... Save the flag and how it was found."
+```
+
+The adapter can save a flag only if it occurs in captured command output or an
+observation you supplied. It refuses guesses; `findings.txt` contains no extra
+report narrative. Do not treat an AI-suggested value as a confirmed flag.
+For GUI tasks, sgpt must use an indexed existing path or ask you for the tool
+directory/executable. It gives a short procedure and asks for the relevant
+observations. It cannot see a GUI result or capture commands you run directly
+in another terminal unless you provide those results.
+
+`terminal.txt` is readable text, not a pixel-perfect copy of terminal colors or
+GUI windows. Known configured API-key values are redacted from logs and guarded
+command results. Other sensitive target data may be present: protect the folder.
+The uninstaller preserves these reports; remove them separately only after
+saving anything needed for your exam/report.
+
+Workflow validation on 2026-11-12: 19 offline regression tests passed. Two
+installed-CLI integration checks on each VM verified that both `--shell` and
+tool commands produce readable audit records, with the API mocked to avoid
+extra charges. Real bounded init reviews succeeded on both VMs: Parrot used
+522 input/349 output tokens; Server 2022 used 1,000 input/359 output tokens.
+No active discovery was run during those tests. The configured local tools
+roots are `/mnt/ceh-tools` for Parrot and `C:\CEH-Tools` for Server 2022.
+
 ## Exam-day smoke test
 
 First check `sgpt --version` reports 1.5.1. For a small paid live check:
