@@ -40,13 +40,45 @@ class RuntimeAuditTests(unittest.TestCase):
             with patch('exam_workflow.Workflow',return_value=workflow),patch.object(workflow,'start_transcript'),patch.object(handler.client.chat.completions,'create',side_effect=create),patch.object(handler.Handler,'get_completion',handler.Handler.get_completion),patch.object(guard,'execute_command',guard.execute_command),patch('sys.argv',arguments),patch('sys.stdin',io.StringIO('')),patch('builtins.input',side_effect=AssertionError('Unexpected approval prompt')):
                 try:exam_runtime.main()
                 except SystemExit as exc:self.assertIn(exc.code,(0,None))
-            records=[json.loads(line) for line in workflow.log.read_text().splitlines()]
-            self.assertEqual(len([r for r in records if r['event']=='result']),1)
-            self.assertIn('Exit code: 0',records[-1]['output'])
-            self.assertIn('OUTPUT:\nExit code: 0', (Path(directory)/'commands.txt').read_text())
+            records=[json.loads(line) for line in (workflow.state/'evidence-index.jsonl').read_text().splitlines()]
+            self.assertEqual(len(records),1)
+            self.assertIn('OUTPUT:\nExit code: 0',workflow.log.read_text())
             self.assertEqual(len(calls),1 if shell else 2)
 
     def test_shell_command_is_audited(self):self.run_cli(True)
     def test_tool_command_is_audited(self):self.run_cli(False)
+
+    def run_repl_reviews(self,shell=False):
+        import exam_runtime
+        import sgpt.handlers.handler as handler
+        guard=importlib.import_module('sgpt.shellgpt_command_guard' if os.name=='nt' else 'sgpt.linux_command_guard')
+        command='Get-Location' if os.name=='nt' else 'pwd'
+        sent=[]
+        def create(**kwargs):
+            sent.append(kwargs)
+            text='Independent review' if kwargs['model']=='gemini-4-carbon' else command if shell else 'Driver answer'
+            message=SimpleNamespace(content=text,model_dump=lambda **kw:dict(role='assistant',content=text))
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+        def entry():
+            role=SimpleNamespace(name='ShellGPT',role='System administration assistant')
+            h=handler.Handler(role,False)
+            for turn in ('first task','second task'):
+                messages=[dict(role='system',content='Base role'),dict(role='user',content=turn)]
+                list(h.get_completion('unused',0,1,messages,functions=None))
+                if shell:guard.run_command(command)
+        with tempfile.TemporaryDirectory() as directory:
+            workflow=Workflow(Path(directory))
+            arguments=['sgpt','--profile','gemini-mix','--repl','offline']+(['--shell'] if shell else [])
+            with patch('exam_workflow.Workflow',return_value=workflow),patch.object(workflow,'start_transcript'),patch('setup_exam.load_keys',return_value={'gemini':'offline-placeholder'}),patch.object(handler.client.chat.completions,'create',side_effect=create),patch.object(handler.Handler,'get_completion',handler.Handler.get_completion),patch.object(guard,'execute_command',guard.execute_command),patch.object(guard,'run_command',guard.run_command),patch('sgpt.app.entry_point',side_effect=entry),patch('sys.argv',arguments),patch('sys.stdin',io.StringIO('')):
+                exam_runtime.main()
+            reviews=[kw for kw in sent if kw['model']=='gemini-4-carbon']
+            self.assertEqual(len(reviews),2)
+            self.assertIn('second task',reviews[1]['messages'][1]['content'])
+            self.assertNotIn('first task',reviews[1]['messages'][1]['content'])
+            self.assertNotIn('tools',reviews[0])
+
+    def test_each_repl_turn_gets_one_carbon_review(self):self.run_repl_reviews()
+
+    def test_each_shell_repl_execution_gets_one_carbon_review(self):self.run_repl_reviews(True)
 
 if __name__=='__main__':unittest.main()

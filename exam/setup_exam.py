@@ -1,4 +1,4 @@
-"""Isolated ShellGPT 1.5.1 + direct Google AI Studio Gemini exam installation."""
+"""Isolated ShellGPT 1.5.1 exam installation with explicit provider profiles."""
 import argparse
 import getpass
 import os
@@ -8,6 +8,8 @@ import subprocess
 import sys
 import sysconfig
 import venv
+import json
+from providers import PROFILES, GOOGLE_BASE, STEP_BASE, select_profile
 
 
 def windows_acl(path, directory=False):
@@ -27,7 +29,7 @@ if($r.directory){[IO.Directory]::SetAccessControl($r.path,$acl)}else{[IO.File]::
     subprocess.run([str(powershell),'-NoProfile','-EncodedCommand',base64.b64encode(code.encode('utf-16-le')).decode()],
                    input=json.dumps(dict(path=str(path),directory=directory)),text=True,check=True,capture_output=True)
 
-BASE='https://generativelanguage.googleapis.com/v1beta/openai/'
+BASE=GOOGLE_BASE
 MODEL='gemini-4-carbon'
 CONFIG=Path.home()/'.config'/'shell_gpt_exam'
 ROOT=Path.home()/'.local'/'share'/'shellgpt-exam'
@@ -56,16 +58,38 @@ def read():
     return dict(line.split('=',1) for line in path.read_text(encoding='utf-8').splitlines() if '=' in line and not line.startswith('#'))
 
 
+def load_keys(directory=None):
+    path=(Path(directory) if directory else CONFIG)/'provider-keys.json'
+    if not path.exists():return {}
+    if path.is_symlink() or path.parent.is_symlink():raise RuntimeError('Redirected key store refused')
+    values=json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(values,dict) or any(k not in ('gemini','stepfun') or not isinstance(v,str) for k,v in values.items()):raise RuntimeError('Invalid provider key store')
+    return values
+
+
+def remember_key(values):
+    key=values.get('OPENAI_API_KEY','')
+    if not key:return
+    matches=[p['key'] for p in PROFILES.values() if p['base'].rstrip('/')==values.get('API_BASE_URL','').rstrip('/')]
+    if not matches:raise RuntimeError('Unexpected key provider')
+    secure_config();keys=load_keys();keys[matches[0]]=key
+    path=CONFIG/'provider-keys.json'
+    if path.is_symlink():raise RuntimeError('Redirected key store refused')
+    path.write_text(json.dumps(keys),encoding='utf-8');os.chmod(path,0o600)
+    if os.name=='nt':windows_acl(path)
+
+
 def key_prompt(values):
-    if values.get('API_BASE_URL')!=BASE:raise RuntimeError('Refusing a key for an unexpected provider')
-    key=getpass.getpass('Google AI Studio API key (hidden; Enter keeps saved key): ')
+    if values.get('API_BASE_URL') not in {p['base'] for p in PROFILES.values()}:raise RuntimeError('Refusing a key for an unexpected provider')
+    key=getpass.getpass(values.get('EXAM_PROFILE','Provider')+' API key (hidden; Enter keeps saved key): ')
     if '\r' in key or '\n' in key:raise ValueError('Key must be one line')
     if key:values['OPENAI_API_KEY']=key
-    save(values)
+    save(values);remember_key(values)
 
 
 def patch(path,before,after):
     text=path.read_text(encoding='utf-8')
+    if before not in text and text.count(after)==1:return
     if text.count(before)!=1:raise RuntimeError('Unexpected ShellGPT source: '+path.name)
     text=text.replace(before,after)
     compile(text,str(path),'exec')
@@ -89,19 +113,22 @@ def main():
     parser.add_argument('--activate',action='store_true',help='Also make sgpt select this exam profile')
     parser.add_argument('--key-stdin',action='store_true',help=argparse.SUPPRESS)
     parser.add_argument('--configure',action='store_true',help=argparse.SUPPRESS)
+    parser.add_argument('--provider',choices=PROFILES)
+    parser.add_argument('--profile-only',action='store_true',help='Switch an existing exam installation without reinstalling packages')
+    parser.add_argument('--reuse-stepfun-key',action='store_true',help='Import the existing same-account StepFun key after checking its endpoint')
     args=parser.parse_args()
     assert sys.version_info>=(3,10),'Python 3.10+ required'
     if args.key_only:
         values=read()
         if args.key_stdin:
-            if values.get('API_BASE_URL')!=BASE:raise RuntimeError('Unexpected key destination')
+            if values.get('API_BASE_URL') not in {p['base'] for p in PROFILES.values()}:raise RuntimeError('Unexpected key destination')
             key=sys.stdin.read().strip()
             if not key or '\n' in key or '\r' in key:raise ValueError('Expected one API key')
-            values['OPENAI_API_KEY']=key;save(values)
+            values['OPENAI_API_KEY']=key;save(values);remember_key(values)
         else:key_prompt(values)
         return
     resources=Path(__file__).resolve().parent
-    if not args.configure:
+    if not args.configure and not args.profile_only:
         if ROOT.is_symlink() or (ROOT/'venv').is_symlink():raise RuntimeError('Redirected installation refused')
         python=ROOT/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
         if not python.exists():venv.create(ROOT/'venv',with_pip=True)
@@ -109,16 +136,31 @@ def main():
         command=[str(python),str(Path(__file__).resolve()),'--configure']
         if args.no_key_prompt:command+=['--no-key-prompt']
         if args.activate:command+=['--activate']
+        if args.provider:command+=['--provider',args.provider]
+        if args.reuse_stepfun_key:command+=['--reuse-stepfun-key']
         subprocess.run(command,check=True);return
-    if sys.prefix==sys.base_prefix:raise RuntimeError('Dedicated venv required')
+    if not args.profile_only and sys.prefix==sys.base_prefix:raise RuntimeError('Dedicated venv required')
     secure_config()
     existing=read()
-    key=existing.get('OPENAI_API_KEY','') if existing.get('API_BASE_URL')==BASE else ''
-    settings=dict(OPENAI_API_KEY=key,API_BASE_URL=BASE,DEFAULT_MODEL=MODEL,REASONING_EFFORT='high',
+    remember_key(existing)
+    if args.reuse_stepfun_key:
+        old=Path.home()/'.config/shell_gpt/.sgptrc'
+        if old.exists() and not old.is_symlink():
+            imported=dict(line.split('=',1) for line in old.read_text().splitlines() if '=' in line)
+            if imported.get('API_BASE_URL','').rstrip('/')!=STEP_BASE.rstrip('/'):raise RuntimeError('Existing StepFun endpoint does not match; key not imported')
+            remember_key(imported)
+    selected=select_profile(existing,args.provider or existing.get('EXAM_PROFILE','stepfun'),load_keys())
+    settings=dict(selected,
         USE_LITELLM='false',OPENAI_USE_FUNCTIONS='true',OPENAI_FUNCTIONS_PATH=str(CONFIG/'functions'),
         ROLE_STORAGE_PATH=str(CONFIG/'roles'),CACHE_PATH=str(CONFIG/'cache'),CHAT_CACHE_PATH=str(CONFIG/'chats'),
-        REQUEST_TIMEOUT='300',SHELL_NAME='powershell' if os.name=='nt' else 'bash',SHELL_INTERACTION='true',SHOW_FUNCTIONS_OUTPUT='true')
+        REQUEST_TIMEOUT='90',SHELL_NAME='powershell' if os.name=='nt' else 'bash',SHELL_INTERACTION='true',SHOW_FUNCTIONS_OUTPUT='true')
     save(settings)
+    if args.profile_only:
+        if not (ROOT/'exam_runtime.py').is_file():raise RuntimeError('Install the exam runtime before switching profiles')
+        for name in ('exam_runtime.py','exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py'):
+            if (resources/name).resolve()!=(ROOT/name).resolve():shutil.copyfile(resources/name,ROOT/name)
+        if not args.no_key_prompt:key_prompt(settings)
+        print('Selected exam profile: '+settings['EXAM_PROFILE']);return
     package=Path(sysconfig.get_path('purelib'))/'sgpt'
     patch(package/'config.py','Path(CONFIG_FOLDER) / "shell_gpt"','Path(CONFIG_FOLDER) / "shell_gpt_exam"')
     platform='windows' if os.name=='nt' else 'linux'
@@ -150,7 +192,7 @@ class Function(BaseModel):
     text=text[:start]+'    if shell and interaction:\n        run_command(full_completion)\n'+text[end:]
     compile(text,str(app),'exec');app.write_text(text,encoding='utf-8')
     runtime=ROOT/'exam_runtime.py';shutil.copyfile(resources/'exam_runtime.py',runtime)
-    for name in ('exam_workflow.py','LAB-RULES.md','setup_exam.py'):
+    for name in ('exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py'):
         if (resources/name).resolve()!=(ROOT/name).resolve():shutil.copyfile(resources/name,ROOT/name)
     bin_dir=ROOT/'bin' if os.name=='nt' else Path.home()/'.local'/'bin'
     bin_dir.mkdir(parents=True,exist_ok=True)

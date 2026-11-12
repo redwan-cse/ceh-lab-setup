@@ -12,9 +12,10 @@ class WorkflowTests(unittest.TestCase):
             w=Workflow(Path(folder),secret='dummy-key')
             result=w.execute('pwd',lambda command:'Exit code: 0, Output:\nFLAG123 dummy-key')
             self.assertIn('FLAG123',result)
-            self.assertNotIn('dummy-key',(Path(folder)/'commands.log').read_text())
+            self.assertNotIn('dummy-key',(Path(folder)/'terminal.txt').read_text())
             self.assertNotIn('dummy-key',result)
-            self.assertIn('OUTPUT:\nExit code: 0, Output:\nFLAG123 [REDACTED]',(Path(folder)/'commands.txt').read_text())
+            self.assertIn('OUTPUT:\nExit code: 0, Output:\nFLAG123 [REDACTED]',(Path(folder)/'terminal.txt').read_text())
+            self.assertEqual({p.name for p in Path(folder).iterdir() if p.is_file()},{'terminal.txt','findings.txt'})
             w.finding('FLAG123','Read from the command output')
             self.assertEqual((Path(folder)/'findings.txt').read_text(),'Flag: FLAG123\nHow found: Read from the command output\n\n')
 
@@ -77,7 +78,33 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(calls[0]['max_completion_tokens'],1536)
             self.assertNotIn('tools',calls[0])
             self.assertLessEqual(len(calls[0]['messages'][1]['content']),5000)
-            self.assertTrue((Path(folder)/'init-review.txt').exists())
+            self.assertFalse((Path(folder)/'init-review.txt').exists())
+
+    def test_default_filing_uses_ip_and_keeps_internal_state_off_desktop(self):
+        import exam_workflow
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            with patch('exam_workflow.desktop',return_value=root/'Desktop'),patch('exam_workflow.local_ip',return_value='10.0.0.4'),patch('exam_workflow.state_root',return_value=root/'private-state'):
+                w=Workflow()
+                self.assertEqual(w.folder,root/'Desktop/CEH-Exam/10.0.0.4')
+                self.assertEqual(w.state,root/'private-state/10.0.0.4')
+                other=Workflow(target_ip='10.0.0.8')
+                self.assertEqual(other.folder.name,'10.0.0.8')
+                with self.assertRaises(ValueError):Workflow(target_ip='../other')
+
+    def test_assistant_text_is_not_command_evidence(self):
+        with tempfile.TemporaryDirectory() as folder:
+            w=Workflow(Path(folder))
+            w.append(w.log,'Assistant guessed FLAG_FAKE\n')
+            with self.assertRaises(ValueError):w.finding('FLAG_FAKE','Not observed')
+
+    def test_command_output_is_saved_as_readable_text_without_ansi(self):
+        with tempfile.TemporaryDirectory() as folder:
+            w=Workflow(Path(folder))
+            w.execute('inspection',lambda command:'Exit code: 0\n\x1b[31mFLAG_COLOR\x1b[0m')
+            self.assertNotIn('\x1b',w.log.read_text())
+            w.finding('FLAG_COLOR','Actual colored command output')
+            self.assertIn('FLAG_COLOR',w.findings.read_text())
 
     def test_context_does_not_send_full_inventory(self):
         import json

@@ -24,7 +24,14 @@ def request_messages(messages,rules,context):
     return result
 
 
-def complete(client, messages, model, tools, execute, limit=8, show_outputs=True, actions=None, history=None):
+def task_status(workflow,profile,completed,review,answer=''):
+    try:structured=json.loads(answer.strip().removeprefix('```json').removesuffix('```').strip())
+    except ValueError:structured=None
+    workflow.write('last-task.json',json.dumps(dict(profile=profile,completed=completed,review=review,
+        command_count=len(workflow.recent_evidence),answer_json=structured if isinstance(structured,dict) else None)))
+
+
+def complete(client, messages, model, tools, execute, limit=8, show_outputs=True, actions=None, history=None,show_command_outputs=True):
     def record(message):
         messages.append(message)
         if history is not None and history is not messages:history.append(message)
@@ -57,21 +64,33 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
                 try:result=actions[name](**arguments)
                 except (TypeError,ValueError) as exc:result='Workflow action refused: '+str(exc)
             else:raise RuntimeError('Unknown tool refused')
-            if show_outputs:yield '\n```text\n'+result+'\n```\n'
+            if show_outputs and (name!='execute_shell_command' or show_command_outputs):yield '\n```text\n'+result+'\n```\n'
             record(dict(role='tool',tool_call_id=call['id'],content=result))
     raise RuntimeError('Tool continuation limit reached; request stopped')
 
 
 def main():
+    import argparse
+    from providers import PROFILES,select_profile,ProviderCalls,review_task
+    from setup_exam import load_keys
+    options=argparse.ArgumentParser(add_help=False)
+    options.add_argument('--profile',choices=PROFILES)
+    options.add_argument('--target-ip')
+    extra,remaining=options.parse_known_args(sys.argv[1:])
+    sys.argv=[sys.argv[0],*remaining]
     path=Path.home()/'.config'/'shell_gpt_exam'/'.sgptrc'
     values=dict(line.split('=',1) for line in path.read_text(encoding='utf-8').splitlines() if '=' in line and not line.startswith('#'))
+    keys=load_keys(path.parent)
+    profile=extra.profile or values.get('EXAM_PROFILE','gemini-carbon' if 'googleapis.com' in values.get('API_BASE_URL','') else 'stepfun')
+    values=select_profile(values,profile,keys)
     # Provider/function overrides must not bypass the protected exam config.
     for name in values:os.environ.pop(name,None)
     from exam_workflow import Workflow
-    workflow=Workflow(secret=values.get('OPENAI_API_KEY',''))
+    workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip)
     workflow.start_transcript()
+    task_status(workflow,profile,False,'pending')
+    workflow.emit('\n[TASK] Profile: '+profile+' | Evidence folder: '+str(workflow.folder)+'\nsgpt '+' '.join(remaining))
     if local_init_request(sys.argv[1:]):
-        import argparse
         parser=argparse.ArgumentParser(description='Save local network facts and optional explicitly scoped discovery')
         parser.add_argument('--init-lab',action='store_true');parser.add_argument('--scope')
         parser.add_argument('--discover',action='store_true');parser.add_argument('--tools-path')
@@ -79,15 +98,17 @@ def main():
         args=parser.parse_args(sys.argv[1:] if '--init-lab' in sys.argv else ['--init-lab'])
         print(workflow.initialize(args.scope,args.discover,args.tools_path))
         if args.local_only:
+            task_status(workflow,profile,True,'skipped')
             print('Local-only initialization: no model/API request was made.');return
         if not values.get('OPENAI_API_KEY'):
+            task_status(workflow,profile,True,'failed')
             print('Local results saved. Gemini review skipped: configure the exam API key first.');return
-        from openai import OpenAI
         try:
-            print(workflow.review(OpenAI(api_key=values['OPENAI_API_KEY'],base_url=values['API_BASE_URL'],max_retries=0,timeout=90),values['DEFAULT_MODEL']))
+            print(workflow.review(ProviderCalls(values,workflow.emit),values.get('REVIEW_MODEL') or values['DEFAULT_MODEL']))
+            task_status(workflow,profile,True,'passed')
         except Exception as exc:
-            message=f'Gemini review unavailable ({type(exc).__name__}); local results remain saved. No retry was made.'
-            workflow.write('init-review.txt',message);print(message)
+            task_status(workflow,profile,True,'failed')
+            print(f'Model review unavailable ({type(exc).__name__}); local results remain saved. No retry was made.')
         return
     if not values.get('OPENAI_API_KEY'):
         if any(x in sys.argv for x in ('--version','--help')):os.environ['OPENAI_API_KEY']='offline-version-check'
@@ -99,10 +120,36 @@ def main():
     original_execute=guard.execute_command
     def execute_command(command):return workflow.execute(command,original_execute)
     guard.execute_command=execute_command  # Also covers --shell's run_command.
+    handler.client.api_key=values.get('OPENAI_API_KEY','offline-version-check')
+    handler.client.base_url=values['API_BASE_URL']
+    handler.client.max_retries=0;handler.client.timeout=90
+    calls=ProviderCalls(values,workflow.emit,handler.client)
+    task={'completed':False,'answer':'','reviewed':False,'prompt':''}
+    def audit():
+        task['reviewed']=True
+        try:
+            review=review_task(workflow,calls,values['REVIEW_MODEL'],task['prompt'],task['answer'])
+            task_status(workflow,profile,True,'passed',task['answer'])
+            return '\n[Independent review: '+values['REVIEW_MODEL']+']\n'+review
+        except Exception as exc:
+            task_status(workflow,profile,True,'failed',task['answer'])
+            return '\n[Independent review unavailable: '+type(exc).__name__+']; task evidence remains saved. No retry was made.'
+    def run_with_review(command):
+        workflow.recent_evidence=[]
+        result=execute_command(command)
+        if task['completed'] and values.get('REVIEW_MODEL'):print(audit())
+        elif task['completed']:task_status(workflow,profile,True,'not-required',task['answer'])
+        return result
+    guard.run_command=run_with_review
     rules=(Path(__file__).parent/'LAB-RULES.md').read_text(encoding='utf-8')
     def get_completion(self,model,temperature,top_p,messages,functions=None,caching=False,**kwargs):
+        workflow.recent_evidence=[]
+        task.update(completed=False,answer='',reviewed=False)
+        task_status(workflow,profile,False,'pending')
         if self.role.name in ('shell','code','describe_shell'):functions=None
         user_evidence='\n'.join(str(m.get('content','')) for m in messages if m.get('role')=='user')
+        task['prompt']=next((str(m.get('content','')) for m in reversed(messages) if m.get('role')=='user'),'')
+        if '--repl' in remaining:workflow.emit('[USER] '+task['prompt'])
         prepared=request_messages(messages,rules,workflow.context())
         actions=dict(init_machine=lambda:workflow.initialize(),find_ceh_tools=workflow.find_tools,
                      save_finding=lambda flag,how_found:workflow.finding(flag,how_found,user_evidence))
@@ -115,10 +162,21 @@ def main():
                 schema={'name':name,'description':description}
                 if properties:schema['parameters']={'type':'object','properties':properties,'required':list(properties)}
                 functions.append({'type':'function','function':schema})
-        yield from complete(handler.client,prepared,model,functions,execute_command,show_outputs=cfg.get('SHOW_FUNCTIONS_OUTPUT')=='true',actions=actions,history=messages)
+        model=model if any(arg in ('--model','-m') or arg.startswith('--model=') for arg in remaining) else values['DEFAULT_MODEL']
+        for chunk in complete(calls,prepared,model,functions,execute_command,show_outputs=cfg.get('SHOW_FUNCTIONS_OUTPUT')=='true',actions=actions,history=messages,show_command_outputs=False):
+            task['answer']=(task['answer']+chunk)[-1500:]
+            yield chunk
+        task['completed']=True
+        if values.get('REVIEW_MODEL'):
+            if '--shell' not in remaining and '-s' not in remaining:yield audit()
+        else:task_status(workflow,profile,True,'not-required',task['answer'])
     handler.Handler.get_completion=get_completion
     from sgpt.app import entry_point
-    entry_point()
+    try:entry_point()
+    except SystemExit as exc:
+        if exc.code not in (0,None):raise
+    if task['completed'] and values.get('REVIEW_MODEL') and not task['reviewed']:print(audit())
+    elif task['completed'] and not values.get('REVIEW_MODEL'):task_status(workflow,profile,True,'not-required',task['answer'])
 
 
 if __name__=='__main__':

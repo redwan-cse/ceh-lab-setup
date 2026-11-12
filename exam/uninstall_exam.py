@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 import shutil
 import sys
-from setup_exam import ROOT,CONFIG,BASE
+from setup_exam import ROOT,CONFIG
+from providers import PROFILES
 
 
 def redirected(path):
@@ -43,7 +44,7 @@ def main():
         if 'ShellGPT exam entry point' not in (ROOT/'exam_runtime.py').read_text():raise RuntimeError('Unknown runtime; removal refused')
     if CONFIG.exists() and not args.keep_config:
         from setup_exam import read
-        if read().get('API_BASE_URL')!=BASE:raise RuntimeError('Config provider changed; use --keep-config and inspect manually')
+        if read().get('API_BASE_URL') not in {p['base'] for p in PROFILES.values()}:raise RuntimeError('Config provider changed; use --keep-config and inspect manually')
     bin_dir=ROOT/'bin' if os.name=='nt' else Path.home()/'.local'/'bin'
     names=['sgpt-exam.cmd','sgpt.cmd'] if os.name=='nt' else ['sgpt-exam','sgpt']
     # Validate all wrappers before modifying either one.

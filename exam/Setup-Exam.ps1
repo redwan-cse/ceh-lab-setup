@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$NoKeyPrompt)
+param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon')][string]$Provider='stepfun',[switch]$ReuseStepFunKey)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $python=Get-Command python.exe -ErrorAction SilentlyContinue
@@ -23,5 +23,7 @@ if(-not $python -or $python.Source -like '*\WindowsApps\*'){
 }else{$python=$python.Source}
 $extra=@()
 if($NoKeyPrompt){$extra+='--no-key-prompt'}
+if($ReuseStepFunKey){$extra+='--reuse-stepfun-key'}
+$extra+=@('--provider',$Provider)
 & $python (Join-Path $PSScriptRoot 'setup_exam.py') --activate @extra
 if($LASTEXITCODE -ne 0){throw 'Exam setup failed.'}
