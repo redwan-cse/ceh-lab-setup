@@ -6,7 +6,7 @@ $privatePython=Join-Path $env:LOCALAPPDATA 'CEHLab\shellgpt-exam\venv\Scripts\py
 $appReady=$false
 if(Test-Path -LiteralPath $privatePython){
     try{
-        & $privatePython -c 'from importlib.metadata import version; assert all(version(n)==v for n,v in {"shell-gpt":"1.5.1","openai":"2.54.0","typer":"0.16.0","click":"8.1.8"}.items())' 2>$null
+        & $privatePython -c "from importlib.metadata import version; assert all(version(n)==v for n,v in {'shell-gpt':'1.5.1','openai':'2.54.0','typer':'0.16.0','click':'8.1.8'}.items())" 2>$null
         $appReady=$LASTEXITCODE -eq 0
     }catch{$appReady=$false}
 }
@@ -42,5 +42,20 @@ $extra=@()
 if($NoKeyPrompt){$extra+='--no-key-prompt'}
 if($ReuseStepFunKey){$extra+='--reuse-stepfun-key'}
 if($Provider){$extra+=@('--provider',$Provider)}
-& $python (Join-Path $PSScriptRoot 'setup_exam.py') --activate @extra
-if($LASTEXITCODE -ne 0){throw 'Exam setup failed.'}
+$previousPreference=$ErrorActionPreference
+$pythonExit=1
+try{
+    # Windows PowerShell treats native stderr (including harmless pip notices)
+    # as ErrorRecords under redirection. Judge installation by its exit code.
+    $ErrorActionPreference='Continue'
+    & $python (Join-Path $PSScriptRoot 'setup_exam.py') --activate @extra
+    $pythonExit=$LASTEXITCODE
+}finally{$ErrorActionPreference=$previousPreference}
+if($pythonExit -ne 0){throw 'Exam setup failed.'}
+& (Join-Path $PSScriptRoot 'Activate-Sgpt.ps1')
+$wrapper=Join-Path $env:LOCALAPPDATA 'CEHLab\shellgpt-exam\bin\sgpt.cmd'
+& $wrapper --version
+if($LASTEXITCODE -ne 0){throw 'ShellGPT was installed but the launcher self-check failed. Inspect the output above.'}
+Write-Host 'Launcher check passed. User PATH is saved and sgpt is ready in this setup process.'
+Write-Host 'An already-open parent terminal keeps its old PATH. In that window, run:'
+Write-Host '$env:Path = "$env:LOCALAPPDATA\CEHLab\shellgpt-exam\bin;$env:Path"'

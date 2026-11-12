@@ -148,6 +148,20 @@ install/repair the private copy and activate `sgpt`. Any launcher replaced in
 our per-user command location is backed up; existing keys and exam evidence
 are retained. Open a new terminal after setup.
 
+Setup notifies the Windows desktop about PATH changes and checks the launcher.
+If an already-open terminal still says `sgpt` is not recognized, activate it
+in that PowerShell window without reinstalling:
+
+```powershell
+$env:Path = "$env:LOCALAPPDATA\CEHLab\shellgpt-exam\bin;$env:Path"
+sgpt --model-info
+```
+
+This also works for older installations and does not require changing PowerShell's
+execution policy.
+The [Windows command lookup guide](exam/README.md#windows-sgpt-is-not-recognized)
+includes a direct-launch fallback.
+
 Active settings/key: `%USERPROFILE%\.config\shell_gpt_exam\.sgptrc`.
 Saved provider keys: `%USERPROFILE%\.config\shell_gpt_exam\provider-keys.json`.
 The files are protected for the current user/SYSTEM and excluded from Git.

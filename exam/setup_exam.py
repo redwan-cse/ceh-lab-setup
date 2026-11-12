@@ -147,6 +147,32 @@ def update_unix_paths():
         path.write_text(line+old.replace(line,''))
 
 
+def notify_windows_environment():
+    """Tell Explorer/new desktop processes to reload the saved user environment."""
+    import ctypes
+    try:
+        send=ctypes.windll.user32.SendMessageTimeoutW
+        send.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_size_t,ctypes.c_wchar_p,
+                       ctypes.c_uint,ctypes.c_uint,ctypes.POINTER(ctypes.c_size_t)]
+        send.restype=ctypes.c_ssize_t
+        result=ctypes.c_size_t()
+        return bool(send(0xffff,0x001a,0,'Environment',0x0002,2000,ctypes.byref(result)))
+    except (AttributeError,OSError):return False
+
+
+def update_windows_paths(bin_dir):
+    import winreg
+    key=lambda value:os.path.expandvars(value.strip().strip('"')).replace('/','\\').rstrip('\\').casefold()
+    def prepend(value):return str(bin_dir)+';'+';'.join(part for part in value.split(';') if part and key(part)!=key(str(bin_dir)))
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER,'Environment') as reg:
+        try:old=winreg.QueryValueEx(reg,'Path')[0]
+        except FileNotFoundError:old=''
+        winreg.SetValueEx(reg,'Path',0,winreg.REG_EXPAND_SZ,prepend(old))
+    os.environ['PATH']=prepend(os.environ.get('PATH',''))
+    if not notify_windows_environment():
+        print('User PATH saved; desktop notification was unavailable. Prepend the command folder to the current terminal PATH or use the full sgpt.cmd path.')
+
+
 def copy_references(resources):
     source=resources.parent/'docs'/'ceh-tools'
     if not source.is_dir():source=resources/'references'
@@ -249,7 +275,7 @@ def write_wrappers(profile=None,activate=False,local_lab=False):
 
 RUNTIME_RESOURCES=('exam_runtime.py','exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py',
                    'Switch-Model.ps1','switch-model.sh','Launch-Sgpt.ps1','launch-sgpt.sh','preflight.py',
-                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh','bootstrap-python-linux.sh','terminal_ui.py','lab_scripts.py')
+                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh','bootstrap-python-linux.sh','terminal_ui.py','lab_scripts.py','Activate-Sgpt.ps1')
 
 
 def copy_runtime_resources(resources):
@@ -352,7 +378,8 @@ def main():
     save(settings)
     if args.profile_only:
         copy_runtime_resources(resources)
-        write_wrappers(settings['EXAM_PROFILE'],args.activate,args.local_lab)
+        bin_dir=write_wrappers(settings['EXAM_PROFILE'],args.activate,args.local_lab)
+        if os.name=='nt':update_windows_paths(bin_dir)
         if not args.no_key_prompt:key_prompt(settings)
         print('Active provider: '+settings['EXAM_PROFILE']);return
     package=Path(sysconfig.get_path('purelib'))/'sgpt'
@@ -399,12 +426,7 @@ class Function(BaseModel):
     copy_runtime_resources(resources)
     bin_dir=write_wrappers(settings['EXAM_PROFILE'],args.activate,args.local_lab)
     if os.name=='nt':
-        import winreg
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,'Environment') as reg:
-            try:old=winreg.QueryValueEx(reg,'Path')[0]
-            except FileNotFoundError:old=''
-            parts=[p for p in old.split(';') if p and p.lower()!=str(bin_dir).lower()]
-            winreg.SetValueEx(reg,'Path',0,winreg.REG_EXPAND_SZ,str(bin_dir)+';'+ ';'.join(parts))
+        update_windows_paths(bin_dir)
     else:
         update_unix_paths()
     if not args.no_key_prompt:key_prompt(settings)

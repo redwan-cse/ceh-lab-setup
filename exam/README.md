@@ -403,6 +403,42 @@ steps and requests your observations. It cannot see GUI results automatically.
 
 ## Reset, remove or troubleshoot
 
+### Windows: sgpt is not recognized
+
+This means the terminal cannot locate the launcher; it does not establish that
+the provider key or Python configuration is missing. Setup saves the per-user
+PATH, broadcasts an environment-change notification to the desktop and checks
+the launcher. A terminal opened from an older CMD/PowerShell or a lab launcher
+can still inherit a stale PATH. A child installer cannot rewrite its parent's
+environment.
+
+In the same PowerShell window, run (also works with older installs and a
+restricted script execution policy):
+
+```powershell
+$env:Path = "$env:LOCALAPPDATA\CEHLab\shellgpt-exam\bin;$env:Path"
+sgpt --model-info
+```
+
+Or bypass PATH entirely, including from a terminal with a stale environment:
+
+```powershell
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-exam\bin\sgpt.cmd" --model-info
+```
+
+CMD equivalent:
+
+```bat
+"%LOCALAPPDATA%\CEHLab\shellgpt-exam\bin\sgpt.cmd" --model-info
+```
+
+If the launcher itself is missing, confirm `whoami` matches the account used
+for setup, then rerun the complete OS installer from the updated repository.
+Capture its output if it stops. Keys remain per-user; do not expose them in
+diagnostic screenshots.
+
+### Reset, removal and provider troubleshooting
+
 Use the reset/removal commands grouped under your OS above. Reset previews
 known generated filenames first; `--clear` removes only those files. Nonempty
 findings, keys and unrelated files survive. Setup never clears logs.
