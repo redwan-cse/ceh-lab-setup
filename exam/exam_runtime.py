@@ -19,8 +19,12 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
         response=client.chat.completions.create(**kwargs)
         if not getattr(response,'choices',None):raise RuntimeError('Provider did not return a parsed chat completion')
         choice=response.choices[0]
-        if 'content_filter' in str(getattr(choice,'finish_reason','')).lower():
-            raise ProviderBlocked('Provider blocked this response (content_filter); no further commands were run and no automatic retry was made.')
+        finish_reason=str(getattr(choice,'finish_reason',''))
+        if 'content_filter' in finish_reason.lower():
+            # OTHER is an unspecified provider stop, not proof of a safety verdict.
+            # Echo only this known enum; arbitrary provider details may contain data.
+            reason='content_filter: OTHER (unspecified provider reason)' if finish_reason.strip().lower()=='content_filter: other' else 'content_filter'
+            raise ProviderBlocked(f'Provider returned no usable completion ({reason}); stopped without further commands or an automatic retry.')
         if not hasattr(getattr(choice,'message',None),'model_dump'):raise RuntimeError('Provider did not return a parsed assistant message')
         message=response.choices[0].message.model_dump(exclude_none=True)
         calls=message.get('tool_calls',[])

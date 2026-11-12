@@ -44,7 +44,15 @@ class ProtocolTests(unittest.TestCase):
             calls.append(kwargs)
             return SimpleNamespace(choices=[SimpleNamespace(message=None,finish_reason='content_filter: OTHER')])
         client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
-        with self.assertRaises(ProviderBlocked):list(complete(client,[],'gemini-4-carbon',[{}],lambda x:self.fail('executed after provider block')))
+        with self.assertRaises(ProviderBlocked) as raised:list(complete(client,[],'gemini-4-carbon',[{}],lambda x:self.fail('executed after provider block')))
+        self.assertIn('content_filter: OTHER',str(raised.exception))
+        self.assertIn('unspecified',str(raised.exception))
+        self.assertNotIn('Provider blocked this response',str(raised.exception))
         self.assertEqual(len(calls),1)
+
+    def test_provider_finish_details_are_not_echoed(self):
+        client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:SimpleNamespace(choices=[SimpleNamespace(message=None,finish_reason='content_filter: private-provider-data')]))))
+        with self.assertRaises(ProviderBlocked) as raised:list(complete(client,[],'gemini-4-carbon',[{}],lambda x:self.fail('executed after provider stop')))
+        self.assertNotIn('private-provider-data',str(raised.exception))
 
 if __name__=='__main__':unittest.main()

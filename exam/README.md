@@ -6,15 +6,31 @@ direct API, ShellGPT **1.5.1**, and **high** reasoning. Your requested
 direct endpoint: `https://generativelanguage.googleapis.com/v1beta/openai/`.
 No OpenRouter, Vercel or StepFun key is used by this profile.
 
-**Current live-test status (2026-11-12):** `sgpt "init the machine"` completed
-on Parrot attacker and Server 2022, including the capped Gemini review. A later
-real agent-command check on both machines returned Google's
-`content_filter: OTHER` with no assistant message. Command-tool execution was
-therefore **blocked, not passed**, in that test. The adapter now reports this
-clearly and stops without executing further commands or automatically retrying.
-The earlier successful live tests below are historical results, not a guarantee
-that the provider currently permits every request. No alternative backend or
-filter workaround was used.
+**Current live-test status (2026-11-12):** Carbon's init review succeeded on both
+VMs, but ordinary chat/command requests have intermittently returned
+`content_filter: OTHER` with no assistant message. Carbon later answered a
+greeting on Parrot, then failed a read-only command request. The precise cause
+is unconfirmed: Google's reference defines `OTHER` as an unknown reason, so this
+is not proof that the greeting or command was rejected for safety.
+
+The same exam profile with `--model gemini-3.8-flash` successfully executed
+`pwd` on Parrot and `Get-Location` on Server 2022 through the real sgpt tool.
+Both were automatically approved by the existing inspection guard and logged.
+Carbon remains the default; no model is silently substituted, no safety setting
+is changed, and failed requests are not automatically retried.
+
+To explicitly use the tested Flash model for a request:
+
+```text
+sgpt --model gemini-3.8-flash "hello"
+```
+
+That option applies to ordinary chat, shell and tool requests. The exact local
+shortcut `sgpt "init the machine"` uses the configured default for its one review.
+Successful key checks using Flash's native API do not establish that Carbon's
+OpenAI-compatible tool requests will succeed. If Carbon stops with `OTHER`,
+keep the model/endpoint, timestamp and harmless reproduction for provider support;
+never include your API key.
 
 ## Install in a new exam VM
 
@@ -298,8 +314,12 @@ Review usage was 607 input/268 output tokens on Parrot and 1,092 input/294 outpu
 tokens on Windows. Requests to execute fresh verification commands through
 sgpt's tool failed at the provider as described above, before those commands
 ran. The former AttributeError for a missing assistant message was fixed and
-covered by a regression test; a provider-filtered completion now exits with
-a clear refusal and code 2.
+covered by a regression test; an unusable provider-filtered completion now exits
+with its known unspecified reason and code 2. Later controlled comparisons found
+that Carbon could answer a greeting on Parrot while still failing `pwd` tool
+execution. Flash executed `pwd` (evidence `2e37288cd81a`) and `Get-Location`
+(evidence `e8ff45996f12`) through sgpt on the two VMs. These prove those command
+paths work with Flash, not that Carbon's provider-side issue has been resolved.
 
 Sources: [Google OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
-and [Gemini 4 Carbon availability](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-carbon-now-available/).
+and [Google response finish reasons](https://aistudio.google.com/api-reference/generate-content#Resource:Candidate).
