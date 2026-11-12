@@ -6,6 +6,16 @@ direct API, ShellGPT **1.5.1**, and **high** reasoning. Your requested
 direct endpoint: `https://generativelanguage.googleapis.com/v1beta/openai/`.
 No OpenRouter, Vercel or StepFun key is used by this profile.
 
+**Current live-test status (2026-11-12):** `sgpt "init the machine"` completed
+on Parrot attacker and Server 2022, including the capped Gemini review. A later
+real agent-command check on both machines returned Google's
+`content_filter: OTHER` with no assistant message. Command-tool execution was
+therefore **blocked, not passed**, in that test. The adapter now reports this
+clearly and stops without executing further commands or automatically retrying.
+The earlier successful live tests below are historical results, not a guarantee
+that the provider currently permits every request. No alternative backend or
+filter workaround was used.
+
 ## Install in a new exam VM
 
 Have Git access to this private repository and Internet access to Python/PyPI
@@ -270,6 +280,26 @@ guard tests and six Windows guard tests also passed in the exam environments.
 On 2026-11-12 both installed command paths and uninstall previews were rechecked;
 the working profiles remain installed. Existing shared command guards are reused.
 No key values or provider error bodies are committed.
+
+### Real sgpt-only verification on 2026-11-12
+
+Both VMs were invoked through the documented `sgpt "init the machine"` entry
+point over SSH. No native network verification commands were run outside sgpt.
+Parrot reported `10.10.10.13/24`, default gateway `10.10.10.1`; Server 2022
+reported `10.10.10.22`, the same gateway, and DNS `8.8.8.8`/`1.1.1.1`.
+These match the documented lab configuration and each other's cached-neighbor
+observations. Current peer reachability was not independently established.
+Scope remained unset, and no active discovery was performed.
+
+Gemini's init review identified collection limits (including Windows prefix
+length absent from the address summary, and missing Linux DNS/IPv6-routing
+sections). Those are not silently counted as complete inventory coverage.
+Review usage was 607 input/268 output tokens on Parrot and 1,092 input/294 output
+tokens on Windows. Requests to execute fresh verification commands through
+sgpt's tool failed at the provider as described above, before those commands
+ran. The former AttributeError for a missing assistant message was fixed and
+covered by a regression test; a provider-filtered completion now exits with
+a clear refusal and code 2.
 
 Sources: [Google OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
 and [Gemini 4 Carbon availability](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-carbon-now-available/).

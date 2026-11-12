@@ -5,6 +5,9 @@ from pathlib import Path
 import sys
 
 
+class ProviderBlocked(RuntimeError):pass
+
+
 def local_init_request(arguments):
     return '--init-lab' in arguments or ' '.join(arguments).strip().lower() in ('init the machine','initialize the machine','init machine','initialize machine')
 
@@ -14,6 +17,11 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
         kwargs=dict(model=model,messages=messages,reasoning_effort='high',stream=False)
         if tools: kwargs.update(tools=tools,tool_choice='auto')
         response=client.chat.completions.create(**kwargs)
+        if not getattr(response,'choices',None):raise RuntimeError('Provider did not return a parsed chat completion')
+        choice=response.choices[0]
+        if 'content_filter' in str(getattr(choice,'finish_reason','')).lower():
+            raise ProviderBlocked('Provider blocked this response (content_filter); no further commands were run and no automatic retry was made.')
+        if not hasattr(getattr(choice,'message',None),'model_dump'):raise RuntimeError('Provider did not return a parsed assistant message')
         message=response.choices[0].message.model_dump(exclude_none=True)
         calls=message.get('tool_calls',[])
         if message.get('content'): yield message['content']
@@ -100,6 +108,12 @@ def main():
 if __name__=='__main__':
     try:main()
     except Exception as exc:
+        if isinstance(exc,ProviderBlocked):
+            print(str(exc),file=sys.stderr);sys.exit(2)
         # Provider error bodies can echo submitted data. Never print them/keys.
         print(f'Exam ShellGPT failed: {type(exc).__name__}; HTTP {getattr(exc,"status_code","n/a")}. Check endpoint, model, key and billing.',file=sys.stderr)
+        if isinstance(exc,(AttributeError,TypeError,NameError)):
+            import traceback
+            frames=traceback.extract_tb(exc.__traceback__)
+            for frame in frames[-4:]:print(f'Local diagnostic: {Path(frame.filename).name}:{frame.lineno} ({frame.name})',file=sys.stderr)
         sys.exit(1)

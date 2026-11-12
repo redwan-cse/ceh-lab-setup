@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from exam_runtime import complete
+from exam_runtime import ProviderBlocked, complete
 
 
 class Message:
@@ -37,5 +37,14 @@ class ProtocolTests(unittest.TestCase):
         value={'role':'assistant','tool_calls':[{'id':'x','function':{'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}}]}
         client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:SimpleNamespace(choices=[SimpleNamespace(message=Message(value))]))))
         with self.assertRaises(RuntimeError):list(complete(client,[],'gemini-4-carbon',[{}],lambda x:'OK',limit=2))
+
+    def test_provider_filter_without_message_stops_without_execution(self):
+        calls=[]
+        def create(**kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(choices=[SimpleNamespace(message=None,finish_reason='content_filter: OTHER')])
+        client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        with self.assertRaises(ProviderBlocked):list(complete(client,[],'gemini-4-carbon',[{}],lambda x:self.fail('executed after provider block')))
+        self.assertEqual(len(calls),1)
 
 if __name__=='__main__':unittest.main()
