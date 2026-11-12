@@ -46,7 +46,7 @@ def main():
         from setup_exam import read
         if read().get('API_BASE_URL') not in {p['base'] for p in PROFILES.values()}:raise RuntimeError('Config provider changed; use --keep-config and inspect manually')
     bin_dir=ROOT/'bin' if os.name=='nt' else Path.home()/'.local'/'bin'
-    names=['sgpt-exam.cmd','sgpt.cmd'] if os.name=='nt' else ['sgpt-exam','sgpt']
+    names=['sgpt-exam.cmd','sgpt-lab.cmd','sgpt.cmd'] if os.name=='nt' else ['sgpt-exam','sgpt-lab','sgpt']
     # Validate all wrappers before modifying either one.
     for name in names:
         path=bin_dir/name

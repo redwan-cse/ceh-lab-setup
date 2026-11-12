@@ -1,11 +1,15 @@
-# Exam ShellGPT: choose StepFun, Gemini or DeepSeek
+# Exam ShellGPT: DeepSeek for exams, StepFun for local labs
 
-**Installed default: StepFun `step-5-preview`, high reasoning.** StepFun, the
+**New exam default: OpenRouter `deepseek/deepseek-v4.1-flash-1017`, high reasoning.** StepFun, the
 Gemini mix and OpenRouter DeepSeek each passed all six matched local cases.
 DeepSeek was fastest in this run; StepFun was faster than the Gemini mix.
 See [measured results](COMPARISON.md). Carbon's earlier direct command
 failures remain unresolved; the mix uses **Flash to execute and Carbon to
 review every completed task**, including each REPL turn.
+
+The later [real terminal challenges](LAB-CHALLENGES.md) support DeepSeek as
+primary with StepFun as a manual alternative: both solved three challenges,
+DeepSeek was faster, and neither completed the reverse SSH client problem.
 
 Choose **one provider at a time**. There is no automatic switching between
 Google, StepFun or OpenRouter. Flash and Carbon in the mix both use Google.
@@ -24,23 +28,56 @@ cd ceh-lab-setup
 For an existing clone, use `git pull --ff-only`. Keep the entire repository:
 the exam installer reuses the command guards in `universal`.
 
-**Windows PowerShell — StepFun:**
+**Windows PowerShell — DeepSeek:**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1
 ```
 
-**Parrot / Debian-based Linux — StepFun, as your normal user:**
+**Parrot / Debian-based Linux — DeepSeek, as your normal user:**
 
 ```bash
-bash ./exam/setup-exam.sh --provider stepfun
+bash ./exam/setup-exam.sh
 ```
 
-Paste your **StepFun API key at the hidden prompt**, then open a new terminal.
+Paste your **OpenRouter API key at the hidden prompt**, then open a new terminal.
 ShellGPT 1.5.1 is pinned in its own environment. Windows reuses Python 3.10+ or
 installs signed Python 3.14.10 for the current user. Linux uses sudo only for
 missing Python/venv prerequisites. Other distributions need their own
 prerequisites. Existing universal StepFun packages/configuration are retained.
+
+These commands install the isolated ShellGPT environment and missing Python
+prerequisites. They do not install the CEH tools in the reference guide. Do not
+rerun the full installer merely to refresh scripts on an existing installation.
+
+## Local practice alongside the exam setup
+
+For a local lab, add `-LocalLab -ReuseStepFunKey` on Windows, or
+`--local-lab --reuse-stepfun-key` on Linux. This keeps plain `sgpt` on StepFun
+and imports only the same account's verified StepFun key. Your OpenRouter key
+is entered separately at the hidden prompt.
+
+| Command | Local-lab mode | Normal exam mode |
+|---|---|---|
+| `sgpt` | StepFun | Selected exam provider (DeepSeek by default) |
+| `sgpt-lab` | StepFun | StepFun, only if its key is configured |
+| `sgpt-exam` | Selected exam provider | Selected exam provider |
+
+To refresh an **existing** installation without installing packages, from the
+full repository use the system Python:
+
+```powershell
+python .\exam\setup_exam.py --profile-only --provider openrouter-deepseek --local-lab --activate --no-key-prompt
+```
+
+```bash
+python3 ./exam/setup_exam.py --profile-only --provider openrouter-deepseek --local-lab --activate --no-key-prompt
+```
+
+This updates managed runtime files, reference Markdown and aliases; it keeps
+keys and evidence. Omit `--local-lab` on a real exam machine. Include
+`--activate` when changing what plain `sgpt` selects. Without it the existing
+plain alias is retained. Reference refresh needs `docs/ceh-tools` in the kit.
 
 **To install/select the Gemini mix instead:**
 
@@ -97,11 +134,11 @@ its own endpoint above. Keys never cross those endpoints.
 On an **existing exam installation**, switch the default without reinstalling:
 
 ```powershell
-python .\exam\setup_exam.py --profile-only --provider stepfun
+python .\exam\setup_exam.py --profile-only --provider stepfun --activate
 ```
 
 ```bash
-python3 ./exam/setup_exam.py --profile-only --provider stepfun
+python3 ./exam/setup_exam.py --profile-only --provider stepfun --activate
 ```
 
 Use `--provider gemini-mix` or `--provider openrouter-deepseek` for another
@@ -121,6 +158,10 @@ sgpt --profile stepfun "Show my current directory"
 sgpt --profile gemini-mix "Show my current directory"
 sgpt --profile openrouter-deepseek "Show my current directory"
 ```
+
+Named chats/caches are isolated by profile. You can use the same chat name with
+different profiles without mixing their model-specific tool histories. Legacy
+shared chats remain on disk and are not automatically imported.
 
 To save a key for another profile without changing the current default:
 
@@ -147,12 +188,14 @@ the exact command. Refusal, missing input or policy failure prevents execution.
 This is an approval aid, not an OS sandbox; independently piping generated
 commands to another shell bypasses it. Tool continuations stop after eight API
 turns. Requests have a 90-second client timeout and no automatic retries.
+Empty responses and output/tool-limit exhaustion stop with an incomplete-task
+message; they are never treated as successful command execution.
 
 The Desktop has **two readable evidence files per IP**:
 
 ```text
 Desktop/CEH-Exam/10.10.10.13/
-    terminal.txt
+    terminal.md
     findings.txt
 ```
 
@@ -168,10 +211,17 @@ sgpt --target-ip 10.10.10.9 "Summarize the observations I provide about this mac
 or redirect local commands. Initialize without it to inventory the machine
 running sgpt. Folders are local to each VM/account, not automatically synced.
 
-`terminal.txt` records prompts, generated commands, actual output, approvals,
+`terminal.md` records prompts, generated commands, actual output, approvals,
 refusals, answers, reviews, API usage and timing. ANSI codes are removed. It
 captures sgpt activity, not other terminals or GUI windows. Known saved keys
 are redacted; other sensitive evidence may remain.
+
+Each task has a Markdown heading; terminal lines are indented to preserve
+spacing and prevent captured text from becoming Markdown instructions/links.
+Text and line layout are preserved; terminal colors and interactive screen
+effects are not. Existing `terminal.txt` files remain historical evidence;
+new output goes only to `terminal.md`, without copying old output. Old indexed
+command evidence still works for confirmed findings.
 
 `findings.txt` contains only `Flag:` and `How found:` blocks. A finding must
 occur in actual command output or your reported observations; AI text alone
@@ -188,6 +238,19 @@ on the Desktop. [LAB-RULES.md](LAB-RULES.md) contains the static rules; observed
 data stays lower-trust request context and does not accumulate in chat history.
 
 ## Initialize, scope and tools
+
+See the [task-oriented tool guides and availability audit](../docs/ceh-tools/README.md).
+Setup copies them locally. Search without a paid request:
+
+```text
+sgpt-exam --tool-help "nmap"
+sgpt-exam --tool-help "hashing"
+```
+
+During a model task, `find_ceh_reference` returns bounded excerpts only when
+needed. It is distinct from `find_ceh_tools`, which checks indexed file paths.
+Neither installs tools or proves runtime readiness. Missing tools and critical
+configuration changes need approval. Prefer existing platform-compatible tools.
 
 `sgpt "init the machine"` records local addresses, IPv4 routes and cached
 neighbors, then asks for one short AI review. It does not scan other machines.

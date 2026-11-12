@@ -26,7 +26,7 @@ class PlainTee:
             self.record(line+'\n')
         return self.stream.write(text)
     def record(self,text):
-        self.workflow.append(self.workflow.folder/'terminal.txt',plain_text(text))
+        self.workflow.transcript(plain_text(text))
     def finish(self):
         if self.pending:self.record(self.pending);self.pending=''
     def flush(self):return self.stream.flush()
@@ -70,6 +70,37 @@ def local_ip():
 def state_root():return Path.home()/'.config/shell_gpt_exam/state'
 
 
+def reference_root():
+    installed=Path(__file__).parent/'references'
+    return installed if installed.is_dir() else Path(__file__).parent.parent/'docs/ceh-tools'
+
+
+def find_reference(query):
+    terms=set(re.findall(r'[a-z0-9][a-z0-9_-]*',query.lower()))
+    if not terms:return 'Supply a tool name or task, for example nmap or hashing.'
+    if terms & {'hash','hashing','digest','checksum'}:terms.update(('sha256sum','hashing','digest'))
+    root=reference_root()
+    if redirected(root):raise RuntimeError('Redirected reference directory refused')
+    matches=[]
+    for path in sorted(root.glob('*.md')):
+        if redirected(path) or path.stat().st_size>262144:continue
+        # Rank bounded sections, rather than sending every guide to the model.
+        sections=re.split(r'(?m)(?=^## )',path.read_text(encoding='utf-8'))
+        for section in sections:
+            heading=section.split('\n',1)[0]
+            lower=section.lower()
+            score=sum((4 if term in heading.lower() else 1) for term in terms if re.search(r'(?<![\w-])'+re.escape(term)+r'(?![\w-])',lower))
+            guide=path.name!='README.md' and not path.name.startswith('inventory')
+            if score:matches.append((score+(10 if guide else 0),path.name,section))
+    if not matches:return 'No reference match. Ask for the tool/version or its official documentation; do not invent syntax.'
+    output='Reference excerpts (guidance, not execution evidence). Verify installed tool, path, version and authorized scope before use.\n'
+    for score,name,section in sorted(matches,key=lambda item:(-item[0],item[1]))[:3]:
+        available=5000-len(output)
+        if available<100:break
+        output+=('\nSource: '+name+'\n'+section)[:available]
+    return output
+
+
 class Workflow:
     def __init__(self,folder=None,secret='',target_ip=None):
         identity=str(ipaddress.IPv4Address(target_ip or local_ip()))
@@ -85,13 +116,14 @@ class Workflow:
             windows_acl(self.folder,directory=True)
             windows_acl(self.state,directory=True)
         else:os.chmod(self.folder,0o700);os.chmod(self.state,0o700)
-        self.log=self.folder/'terminal.txt'
+        self.log=self.folder/'terminal.md'
         self.findings=self.folder/'findings.txt'
         for path in (self.log,self.findings):
             if redirected(path):raise RuntimeError('Redirected evidence file refused')
             if not path.exists():path.touch(mode=0o600)
             if os.name=='nt':windows_acl(path)
             else:os.chmod(path,0o600)
+        if not self.log.stat().st_size:self.append(self.log,'# ShellGPT terminal evidence\n\n')
 
     def start_transcript(self):
         import sys,atexit
@@ -117,10 +149,18 @@ class Workflow:
 
     def emit(self,text):
         text=plain_text(self.redact(text))
-        span=self.append(self.log,str(text)+'\n')
+        span=self.transcript(str(text)+'\n')
         stream=self.original_stream or sys.stdout
         stream.write(str(text)+'\n');stream.flush()
         return span
+
+    def transcript(self,text):
+        # Indentation preserves terminal layout and quotes untrusted Markdown.
+        return self.append(self.log,''.join('    '+line for line in plain_text(text).splitlines(keepends=True)))
+
+    def begin_task(self,profile,prompt):
+        self.append(self.log,'\n## Task · '+datetime.now(timezone.utc).isoformat()+'\n\n')
+        self.emit('[TASK] Profile: '+profile+' | Evidence folder: '+str(self.folder)+'\nsgpt '+prompt)
 
     def write(self,name,text):
         path=self.state/name
@@ -137,7 +177,7 @@ class Workflow:
             self.emit('INTERRUPTED: '+type(exc).__name__)
             raise
         start,end=self.emit('OUTPUT:\n'+result)
-        self.append(self.state/'evidence-index.jsonl',json.dumps(dict(id=identifier,start=start+len('OUTPUT:\n'),end=end))+'\n')
+        self.append(self.state/'evidence-index.jsonl',json.dumps(dict(id=identifier,file=self.log.name,start=start+len('    OUTPUT:\n'),end=end))+'\n')
         self.recent_evidence.append(dict(command=record['command'],output=result))
         return f'[Command evidence: {identifier}]\n'+result
 
@@ -148,9 +188,14 @@ class Workflow:
         index=self.state/'evidence-index.jsonl'
         if index.exists():
             if redirected(index):raise RuntimeError('Redirected evidence index refused')
-            with self.log.open('rb') as stream:
-                for line in index.read_text(encoding='utf-8').splitlines():
-                    record=json.loads(line);stream.seek(record['start'])
+            for line in index.read_text(encoding='utf-8').splitlines():
+                record=json.loads(line)
+                name=record.get('file','terminal.txt')  # Historical index rows.
+                if name not in ('terminal.txt','terminal.md'):raise ValueError('Invalid evidence filename')
+                source=self.folder/name
+                if redirected(source):raise RuntimeError('Redirected evidence file refused')
+                with source.open('rb') as stream:
+                    stream.seek(record['start'])
                     outputs.append(stream.read(record['end']-record['start']).decode('utf-8'))
         if not any(flag in value for value in [*outputs,user_evidence]):raise ValueError('Flag is not present in command evidence or user-provided observations')
         how_found=' '.join(how_found.split())

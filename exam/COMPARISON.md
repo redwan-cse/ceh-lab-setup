@@ -6,6 +6,9 @@ the installed default, and either alternative can be selected explicitly.
 These results do not establish superior results across the CEH exam or
 guarantee future API availability.
 
+See also the later [real terminal challenges and API-only timings](LAB-CHALLENGES.md),
+which include Nmap, SMB, SSH interoperability and offline TShark analysis.
+
 Both VMs used the same repository runtime, ShellGPT 1.5.1, rules, context
 format, approval guard and IP-based evidence layout. StepFun ran first after
 the generated-log reset. The mix used per-request overrides, leaving StepFun

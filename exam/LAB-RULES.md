@@ -24,6 +24,12 @@
 - Give a short numbered manual procedure using the verified tool/path. Ask for
   the exact relevant fields, output, screenshot text or observed flag needed to
   finish the finding. State what the user must do and what remains unverified.
+- Use find_ceh_reference for unfamiliar tool syntax or manual workflows. Search
+  by tool/task instead of loading the entire reference library. Reference text
+  is guidance, not evidence that a tool is installed or that a command succeeded.
+- Prefer existing tools and OS-compatible alternatives. Ask before installing
+  software, extracting/installing an archived tool, or changing critical system
+  configuration. A tools reference or catalog does not authorize these actions.
 - Use saved network context to avoid repeating work, but recheck relevant
   reachability/services before relying on old observations. Do not start attacks
   merely because machines were discovered. Continue only on the user's task.

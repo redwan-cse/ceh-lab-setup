@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -42,7 +43,7 @@ class RuntimeAuditTests(unittest.TestCase):
                 except SystemExit as exc:self.assertIn(exc.code,(0,None))
             records=[json.loads(line) for line in (workflow.state/'evidence-index.jsonl').read_text().splitlines()]
             self.assertEqual(len(records),1)
-            self.assertIn('OUTPUT:\nExit code: 0',workflow.log.read_text())
+            self.assertIn('    OUTPUT:\n    Exit code: 0',workflow.log.read_text())
             self.assertEqual(len(calls),1 if shell else 2)
 
     def test_shell_command_is_audited(self):self.run_cli(True)
@@ -80,5 +81,47 @@ class RuntimeAuditTests(unittest.TestCase):
     def test_each_repl_turn_gets_one_carbon_review(self):self.run_repl_reviews()
 
     def test_each_shell_repl_execution_gets_one_carbon_review(self):self.run_repl_reviews(True)
+
+    def test_same_chat_name_is_isolated_between_profiles(self):
+        from providers import STEP_BASE
+        code=r'''
+import json,sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+source=Path(sys.argv[1]);home=Path(sys.argv[2]);profile=sys.argv[3]
+sys.path.insert(0,str(source))
+calls=[]
+def create(self,**kwargs):
+    calls.append(kwargs)
+    other='stepfun' if profile=='openrouter-deepseek' else 'openrouter-deepseek'
+    assert not any('REPLY_'+other in str(m.get('content','')) for m in kwargs['messages'])
+    value=dict(role='assistant',content='REPLY_'+profile)
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(model_dump=lambda **kw:value),finish_reason='stop')])
+with patch('pathlib.Path.home',return_value=home),patch('getpass.getpass',side_effect=AssertionError('Unexpected credential prompt')),patch('socket.socket.connect',side_effect=AssertionError('Unexpected network request')),patch('openai.resources.chat.completions.Completions.create',create):
+    import exam_runtime,exam_workflow
+    with patch.object(exam_workflow,'desktop',return_value=home/'Desktop'),patch.object(exam_workflow,'local_ip',return_value='127.0.0.1'),patch.object(exam_workflow.Workflow,'start_transcript'):
+        sys.argv=['sgpt','--profile',profile,'--no-functions','--chat','shared-name','test message']
+        exam_runtime.main()
+    from sgpt.config import cfg
+    assert cfg.config_path==home/'.config'/'shell_gpt_exam'/'.sgptrc', 'CLI used a real config path'
+    assert len(calls)==1, 'Expected exactly one intercepted completion'
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory);config=home/'.config/shell_gpt_exam';config.mkdir(parents=True)
+            settings=dict(OPENAI_API_KEY='offline-step',API_BASE_URL=STEP_BASE,EXAM_PROFILE='stepfun',
+                          ROLE_STORAGE_PATH=str(config/'roles'),CHAT_CACHE_PATH=str(config/'legacy-chats'),CACHE_PATH=str(config/'legacy-cache'))
+            (config/'.sgptrc').write_text(''.join(f'{k}={v}' + chr(10) for k,v in settings.items()))
+            (config/'provider-keys.json').write_text(json.dumps(dict(stepfun='offline-step',openrouter='offline-router')))
+            # sgpt uses expanduser, while exam_runtime uses Path.home. Isolate both.
+            environment=dict(os.environ,HOME=str(home),USERPROFILE=str(home))
+            for profile in ('openrouter-deepseek','stepfun','openrouter-deepseek','stepfun'):
+                result=subprocess.run([sys.executable,'-c',code,str(Path(__file__).parent),str(home),profile],env=environment,input='',capture_output=True,text=True,timeout=45)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            for profile in ('openrouter-deepseek','stepfun'):
+                saved=(config/'chats'/profile/'shared-name').read_text()
+                self.assertIn('REPLY_'+profile,saved)
+                other='stepfun' if profile=='openrouter-deepseek' else 'openrouter-deepseek'
+                self.assertNotIn('REPLY_'+other,saved)
 
 if __name__=='__main__':unittest.main()

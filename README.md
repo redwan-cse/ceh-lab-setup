@@ -1,8 +1,10 @@
 # ceh-lab-setup
 
 **Exam setup with evidence logs:** see [exam/README.md](exam/README.md) for
-StepFun first, optional Gemini or OpenRouter DeepSeek, OS setup, API keys and two-file
-evidence folders named by IP. [Matched results](exam/COMPARISON.md).
+OpenRouter DeepSeek for the exam, StepFun for local practice, API keys and
+Markdown terminal logs in folders named by IP. [Real tool challenges](exam/LAB-CHALLENGES.md).
+The [CEH tools reference](docs/ceh-tools/README.md) includes the local inventory,
+commands, workflows and Windows alternatives. It does not install tools.
 
 OpenSSH and ShellGPT setup for CEH practice. ShellGPT **1.5.1**, model
 **step-5-preview**, **high** reasoning, endpoint
@@ -32,15 +34,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1
 Parrot / Debian-based Linux, as your normal user:
 
 ```bash
-bash ./exam/setup-exam.sh --provider stepfun
+bash ./exam/setup-exam.sh
 ```
 
-These select StepFun, prompt for its key and save `terminal.txt` plus
+These select OpenRouter `deepseek/deepseek-v4.1-flash-1017`, prompt for its key and save `terminal.md` plus
 `findings.txt` under `Desktop/CEH-Exam/<IP>`. They configure ShellGPT only.
 Choose one provider at a time; [the exam guide](exam/README.md) explains the
-Google-only Flash/Carbon and OpenRouter DeepSeek options. There is no automatic cross-provider switch.
+StepFun and Google-only Flash/Carbon options. There is no automatic cross-provider switch.
 If Git is unavailable, download and extract the repository ZIP, then run the
 same setup command from its folder.
+
+To test DeepSeek while retaining StepFun as plain `sgpt` on a local lab VM,
+add `-LocalLab -ReuseStepFunKey` on Windows, or
+`--local-lab --reuse-stepfun-key` on Linux. Then use `sgpt-exam` for DeepSeek
+and `sgpt` / `sgpt-lab` for StepFun. Fresh exam machines need only the normal
+command above and an OpenRouter key. These setup commands install ShellGPT
+and required Python components; the tool inventory itself is read-only.
 
 ### Windows 11 / Windows Server 2019 or 2022
 

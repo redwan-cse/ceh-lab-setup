@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from exam_workflow import desktop,state_root,redirected
 
-LOGS={'terminal.txt','commands.txt','commands.log','network-info.txt','network-info.json','init-review.txt','tool-index.json'}
+LOGS={'terminal.md','terminal.txt','commands.txt','commands.log','network-info.txt','network-info.json','init-review.txt','tool-index.json'}
 STATE={'network-info.json','network-info.txt','evidence-index.jsonl','tool-index.json','last-task.json'}
 
 

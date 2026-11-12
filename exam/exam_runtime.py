@@ -6,10 +6,23 @@ import sys
 
 
 class ProviderBlocked(RuntimeError):pass
+class ProviderIncomplete(RuntimeError):pass
+
+
+def configure_stdio():
+    # SSH pipes on Windows can inherit a legacy code page. Keep model text UTF-8.
+    for stream in (sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
 
 
 def local_init_request(arguments):
     return '--init-lab' in arguments or ' '.join(arguments).strip().lower() in ('init the machine','initialize the machine','init machine','initialize machine')
+
+
+def profile_chat_paths(config,profile):
+    from providers import PROFILES
+    if profile not in PROFILES:raise ValueError('Unknown profile')
+    return {key:str(Path(config)/folder/profile) for key,folder in (('CHAT_CACHE_PATH','chats'),('CACHE_PATH','cache'))}
 
 
 def request_messages(messages,rules,context):
@@ -42,6 +55,7 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
         if not getattr(response,'choices',None):raise RuntimeError('Provider did not return a parsed chat completion')
         choice=response.choices[0]
         finish_reason=str(getattr(choice,'finish_reason',''))
+        if finish_reason=='length':raise ProviderIncomplete('Provider reached its output budget; stopped without executing incomplete output or further commands.')
         if 'content_filter' in finish_reason.lower():
             # OTHER is an unspecified provider stop, not proof of a safety verdict.
             # Echo only this known enum; arbitrary provider details may contain data.
@@ -50,6 +64,7 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
         if not hasattr(getattr(choice,'message',None),'model_dump'):raise RuntimeError('Provider did not return a parsed assistant message')
         message=response.choices[0].message.model_dump(exclude_none=True)
         calls=message.get('tool_calls',[])
+        if not calls and (not isinstance(message.get('content'),str) or not message['content'].strip()):raise ProviderIncomplete('Provider returned no usable assistant text or tool call; task is incomplete. No further commands were run.')
         if message.get('content'): yield message['content']
         if not calls:return
         if not tools:raise RuntimeError('Unexpected tool call with tools disabled')
@@ -66,16 +81,18 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
             else:raise RuntimeError('Unknown tool refused')
             if show_outputs and (name!='execute_shell_command' or show_command_outputs):yield '\n```text\n'+result+'\n```\n'
             record(dict(role='tool',tool_call_id=call['id'],content=result))
-    raise RuntimeError('Tool continuation limit reached; request stopped')
+    raise ProviderIncomplete('Tool continuation limit reached; task is incomplete. Inspect saved evidence before continuing. No further commands were run.')
 
 
 def main():
+    configure_stdio()
     import argparse
     from providers import PROFILES,select_profile,ProviderCalls,review_task
     from setup_exam import load_keys
     options=argparse.ArgumentParser(add_help=False)
     options.add_argument('--profile',choices=PROFILES)
     options.add_argument('--target-ip')
+    options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
     extra,remaining=options.parse_known_args(sys.argv[1:])
     sys.argv=[sys.argv[0],*remaining]
     path=Path.home()/'.config'/'shell_gpt_exam'/'.sgptrc'
@@ -85,11 +102,15 @@ def main():
     values=select_profile(values,profile,keys)
     # Provider/function overrides must not bypass the protected exam config.
     for name in values:os.environ.pop(name,None)
-    from exam_workflow import Workflow
+    for name,value in profile_chat_paths(path.parent,profile).items():os.environ[name]=value
+    from exam_workflow import Workflow,find_reference
     workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip)
     workflow.start_transcript()
     task_status(workflow,profile,False,'pending')
-    workflow.emit('\n[TASK] Profile: '+profile+' | Evidence folder: '+str(workflow.folder)+'\nsgpt '+' '.join(remaining))
+    workflow.begin_task(profile,' '.join(sys.argv[1:]) if not extra.tool_help else '--tool-help '+extra.tool_help)
+    if extra.tool_help:
+        print(find_reference(extra.tool_help))
+        task_status(workflow,profile,True,'local-reference');return
     if local_init_request(sys.argv[1:]):
         parser=argparse.ArgumentParser(description='Save local network facts and optional explicitly scoped discovery')
         parser.add_argument('--init-lab',action='store_true');parser.add_argument('--scope')
@@ -102,7 +123,7 @@ def main():
             print('Local-only initialization: no model/API request was made.');return
         if not values.get('OPENAI_API_KEY'):
             task_status(workflow,profile,True,'failed')
-            print('Local results saved. Gemini review skipped: configure the exam API key first.');return
+            print('Local results saved. Model review skipped: configure the selected provider API key first.');return
         try:
             print(workflow.review(ProviderCalls(values,workflow.emit),values.get('REVIEW_MODEL') or values['DEFAULT_MODEL']))
             task_status(workflow,profile,True,'passed')
@@ -112,7 +133,7 @@ def main():
         return
     if not values.get('OPENAI_API_KEY'):
         if any(x in sys.argv for x in ('--version','--help')):os.environ['OPENAI_API_KEY']='offline-version-check'
-        else:raise RuntimeError('Save your Gemini key using setup_exam.py --key-only')
+        else:raise RuntimeError('Save your provider key using setup_exam.py --key-only')
     import sgpt.handlers.handler as handler
     from sgpt.config import cfg
     if os.name=='nt':from sgpt import shellgpt_command_guard as guard
@@ -151,13 +172,14 @@ def main():
         task['prompt']=next((str(m.get('content','')) for m in reversed(messages) if m.get('role')=='user'),'')
         if '--repl' in remaining:workflow.emit('[USER] '+task['prompt'])
         prepared=request_messages(messages,rules,workflow.context())
-        actions=dict(init_machine=lambda:workflow.initialize(),find_ceh_tools=workflow.find_tools,
+        actions=dict(init_machine=lambda:workflow.initialize(),find_ceh_tools=workflow.find_tools,find_ceh_reference=find_reference,
                      save_finding=lambda flag,how_found:workflow.finding(flag,how_found,user_evidence))
         if functions:
             functions=list(functions)
             for name,description,properties in (
                 ('init_machine','Collect this machine network settings and cached neighbors. No active discovery.',{}),
                 ('find_ceh_tools','Find verified tool paths in the user-configured CEH tools index.',{'query':{'type':'string'}}),
+                ('find_ceh_reference','Search concise tool syntax and workflows. Guidance only; verify installed tools and paths before execution.',{'query':{'type':'string'}}),
                 ('save_finding','Save only a confirmed flag and how it was found, using command or user evidence.',{'flag':{'type':'string'},'how_found':{'type':'string'}})):
                 schema={'name':name,'description':description}
                 if properties:schema['parameters']={'type':'object','properties':properties,'required':list(properties)}
@@ -182,7 +204,7 @@ def main():
 if __name__=='__main__':
     try:main()
     except Exception as exc:
-        if isinstance(exc,ProviderBlocked):
+        if isinstance(exc,(ProviderBlocked,ProviderIncomplete)):
             print(str(exc),file=sys.stderr);sys.exit(2)
         # Provider error bodies can echo submitted data. Never print them/keys.
         print(f'Exam ShellGPT failed: {type(exc).__name__}; HTTP {getattr(exc,"status_code","n/a")}. Check endpoint, model, key and billing.',file=sys.stderr)

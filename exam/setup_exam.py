@@ -107,11 +107,51 @@ def update_unix_paths():
         path.write_text(line+old.replace(line,''))
 
 
+def copy_references(resources):
+    source=resources.parent/'docs'/'ceh-tools'
+    target=ROOT/'references'
+    if source.is_symlink() or target.is_symlink():raise RuntimeError('Redirected reference directory refused')
+    if not source.is_dir():raise RuntimeError('Keep docs/ceh-tools with the setup kit')
+    target.mkdir(exist_ok=True)
+    for path in source.glob('*.md'):
+        destination=target/path.name
+        if path.is_symlink() or destination.is_symlink():raise RuntimeError('Redirected reference refused')
+        if path.resolve()!=destination.resolve():shutil.copyfile(path,destination)
+
+
+def write_wrappers(profile,activate=False,local_lab=False):
+    runtime=ROOT/'exam_runtime.py'
+    python=ROOT/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
+    bin_dir=ROOT/'bin' if os.name=='nt' else Path.home()/'.local'/'bin'
+    if bin_dir.is_symlink():raise RuntimeError('Redirected CLI directory refused')
+    bin_dir.mkdir(parents=True,exist_ok=True)
+    names={'sgpt-exam':profile,'sgpt-lab':'stepfun'}
+    if activate:names['sgpt']='stepfun' if local_lab else profile
+    pending=[]
+    for name,selected in names.items():
+        target=bin_dir/(name+'.cmd' if os.name=='nt' else name)
+        if target.is_symlink():raise RuntimeError('Refusing a redirected CLI wrapper')
+        if target.exists() and str(runtime) not in target.read_text(encoding='utf-8'):
+            if name!='sgpt':raise RuntimeError('Unmanaged named CLI wrapper refused: '+name)
+            backup=target.with_name(target.name+'.before-exam')
+            if backup.is_symlink():raise RuntimeError('Redirected wrapper backup refused')
+            if not backup.exists():shutil.copyfile(target,backup)
+        if os.name=='nt':wrapper=f'@echo off\n"{python}" "{runtime}" --profile {selected} %*\n'
+        else:
+            import shlex
+            wrapper=f'#!/bin/sh\nexec {shlex.quote(str(python))} {shlex.quote(str(runtime))} --profile {selected} "$@"\n'
+        pending.append((target,wrapper))
+    for target,wrapper in pending:
+        target.write_text(wrapper,encoding='utf-8',newline='\n');os.chmod(target,0o700)
+    return bin_dir
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--key-only',action='store_true')
     parser.add_argument('--no-key-prompt',action='store_true')
     parser.add_argument('--activate',action='store_true',help='Also make sgpt select this exam profile')
+    parser.add_argument('--local-lab',action='store_true',help='With --activate, keep plain sgpt on StepFun; sgpt-exam uses the exam provider')
     parser.add_argument('--key-stdin',action='store_true',help=argparse.SUPPRESS)
     parser.add_argument('--configure',action='store_true',help=argparse.SUPPRESS)
     parser.add_argument('--provider',choices=PROFILES)
@@ -141,6 +181,7 @@ def main():
         command=[str(python),str(Path(__file__).resolve()),'--configure']
         if args.no_key_prompt:command+=['--no-key-prompt']
         if args.activate:command+=['--activate']
+        if args.local_lab:command+=['--local-lab']
         if args.provider:command+=['--provider',args.provider]
         if args.reuse_stepfun_key:command+=['--reuse-stepfun-key']
         subprocess.run(command,check=True);return
@@ -154,7 +195,7 @@ def main():
             imported=dict(line.split('=',1) for line in old.read_text().splitlines() if '=' in line)
             if imported.get('API_BASE_URL','').rstrip('/')!=STEP_BASE.rstrip('/'):raise RuntimeError('Existing StepFun endpoint does not match; key not imported')
             remember_key(imported)
-    selected=select_profile(existing,args.provider or existing.get('EXAM_PROFILE','stepfun'),load_keys())
+    selected=select_profile(existing,args.provider or existing.get('EXAM_PROFILE','openrouter-deepseek'),load_keys())
     settings=dict(selected,
         USE_LITELLM='false',OPENAI_USE_FUNCTIONS='true',OPENAI_FUNCTIONS_PATH=str(CONFIG/'functions'),
         ROLE_STORAGE_PATH=str(CONFIG/'roles'),CACHE_PATH=str(CONFIG/'cache'),CHAT_CACHE_PATH=str(CONFIG/'chats'),
@@ -164,6 +205,8 @@ def main():
         if not (ROOT/'exam_runtime.py').is_file():raise RuntimeError('Install the exam runtime before switching profiles')
         for name in ('exam_runtime.py','exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py'):
             if (resources/name).resolve()!=(ROOT/name).resolve():shutil.copyfile(resources/name,ROOT/name)
+        copy_references(resources)
+        write_wrappers(settings['EXAM_PROFILE'],args.activate,args.local_lab)
         if not args.no_key_prompt:key_prompt(settings)
         print('Selected exam profile: '+settings['EXAM_PROFILE']);return
     package=Path(sysconfig.get_path('purelib'))/'sgpt'
@@ -199,21 +242,8 @@ class Function(BaseModel):
     runtime=ROOT/'exam_runtime.py';shutil.copyfile(resources/'exam_runtime.py',runtime)
     for name in ('exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py'):
         if (resources/name).resolve()!=(ROOT/name).resolve():shutil.copyfile(resources/name,ROOT/name)
-    bin_dir=ROOT/'bin' if os.name=='nt' else Path.home()/'.local'/'bin'
-    bin_dir.mkdir(parents=True,exist_ok=True)
-    if os.name=='nt':
-        wrapper=f'@echo off\n"{sys.executable}" "{runtime}" %*\n'
-        names=['sgpt-exam.cmd']+(['sgpt.cmd'] if args.activate else [])
-    else:
-        import shlex
-        wrapper=f'#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(runtime))} "$@"\n'
-        names=['sgpt-exam']+(['sgpt'] if args.activate else [])
-    for name in names:
-        target=bin_dir/name
-        if target.is_symlink():raise RuntimeError('Refusing a redirected CLI wrapper')
-        if name in ('sgpt','sgpt.cmd') and target.exists() and str(runtime) not in target.read_text(encoding='utf-8') and not target.with_name(name+'.before-exam').exists():
-            shutil.copyfile(target,target.with_name(name+'.before-exam'))
-        target.write_text(wrapper,encoding='utf-8',newline='\n');os.chmod(target,0o700)
+    copy_references(resources)
+    bin_dir=write_wrappers(settings['EXAM_PROFILE'],args.activate,args.local_lab)
     if os.name=='nt':
         import winreg
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER,'Environment') as reg:

@@ -6,6 +6,9 @@
 !/ceh-local-lab/
 !/universal/
 !/exam/
+!/docs/
+/docs/*
+!/docs/ceh-tools/
 
 # Never publish runtime credentials, profiles, logs, caches or local archives.
 **/__pycache__/
@@ -34,3 +37,7 @@
 **/.venv/
 **/node_modules/
 **/cache*/
+
+# The reference directory is documentation, not the deployed tools library.
+!/docs/ceh-tools/
+!/docs/ceh-tools/*.md

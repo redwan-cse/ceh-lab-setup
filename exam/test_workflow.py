@@ -12,10 +12,10 @@ class WorkflowTests(unittest.TestCase):
             w=Workflow(Path(folder),secret='dummy-key')
             result=w.execute('pwd',lambda command:'Exit code: 0, Output:\nFLAG123 dummy-key')
             self.assertIn('FLAG123',result)
-            self.assertNotIn('dummy-key',(Path(folder)/'terminal.txt').read_text())
+            self.assertNotIn('dummy-key',w.log.read_text())
             self.assertNotIn('dummy-key',result)
-            self.assertIn('OUTPUT:\nExit code: 0, Output:\nFLAG123 [REDACTED]',(Path(folder)/'terminal.txt').read_text())
-            self.assertEqual({p.name for p in Path(folder).iterdir() if p.is_file()},{'terminal.txt','findings.txt'})
+            self.assertIn('    OUTPUT:\n    Exit code: 0, Output:\n    FLAG123 [REDACTED]',w.log.read_text())
+            self.assertEqual({p.name for p in Path(folder).iterdir() if p.is_file()},{'terminal.md','findings.txt'})
             w.finding('FLAG123','Read from the command output')
             self.assertEqual((Path(folder)/'findings.txt').read_text(),'Flag: FLAG123\nHow found: Read from the command output\n\n')
 
@@ -136,7 +136,23 @@ class WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             w=Workflow(Path(folder),secret='dummy-key');tee=PlainTee(io.StringIO(),w)
             tee.write('\x1b[31mdummy-');tee.flush();tee.write('key\x1b[0m\x1b]8;;https://example.com\x1b\\ link\x1b]8;;\x1b\\\n')
-            result=(Path(folder)/'terminal.txt').read_text()
-            self.assertEqual(result,'[REDACTED] link\n')
+            result=w.log.read_text()
+            self.assertTrue(result.endswith('    [REDACTED] link\n'))
+
+    def test_markdown_keeps_legacy_evidence_and_quotes_terminal_content(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);legacy=root/'terminal.txt';legacy.write_text('LEGACY_FLAG\n')
+            w=Workflow(root)
+            w.append(w.state/'evidence-index.jsonl',json.dumps(dict(id='legacy',start=0,end=len('LEGACY_FLAG\n')))+'\n')
+            w.finding('LEGACY_FLAG','Previously captured command output')
+            w.execute('inspection',lambda cmd:'Exit code: 0\n# untrusted heading\n```\nNEW_FLAG')
+            w.finding('NEW_FLAG','New captured command output')
+            self.assertEqual(legacy.read_text(),'LEGACY_FLAG\n')
+            text=w.log.read_text()
+            self.assertTrue(text.startswith('# ShellGPT terminal evidence'))
+            self.assertIn('    # untrusted heading\n    ```',text)
+            records=[json.loads(line) for line in (w.state/'evidence-index.jsonl').read_text().splitlines()]
+            self.assertEqual(records[-1]['file'],'terminal.md')
 
 if __name__=='__main__':unittest.main()

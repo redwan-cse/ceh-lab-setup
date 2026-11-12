@@ -50,8 +50,10 @@ def main():
             if name=='actual-command':
                 rows=[json.loads(line) for line in index.read_text().splitlines()][before:] if index.exists() else []
                 actual=[]
-                with (folder/'terminal.txt').open('rb') as stream:
-                    for row in rows:
+                for row in rows:
+                    filename=row.get('file','terminal.txt')
+                    if filename not in ('terminal.txt','terminal.md') or redirected(folder/filename):raise RuntimeError('Invalid evidence source')
+                    with (folder/filename).open('rb') as stream:
                         stream.seek(row['start']);actual.append(stream.read(row['end']-row['start']).decode())
                 tool_pass=len(actual)==1 and 'Exit code: 0' in actual[0] and bool(re.search(r'\b20\d\d\b',actual[0]))
                 passed=passed and tool_pass

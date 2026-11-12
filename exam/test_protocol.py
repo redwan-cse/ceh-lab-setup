@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from exam_runtime import ProviderBlocked, complete, request_messages
+from exam_runtime import ProviderBlocked, complete, request_messages, profile_chat_paths
 
 
 class Message:
@@ -9,6 +9,22 @@ class Message:
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_profiles_never_share_saved_chat_paths(self):
+        from pathlib import Path
+        step=profile_chat_paths(Path('/config'),'stepfun')
+        router=profile_chat_paths(Path('/config'),'openrouter-deepseek')
+        self.assertNotEqual(step['CHAT_CACHE_PATH'],router['CHAT_CACHE_PATH'])
+        self.assertTrue(step['CHAT_CACHE_PATH'].endswith('stepfun'))
+
+    def test_output_limit_never_executes_an_incomplete_tool_call(self):
+        value={'role':'assistant','tool_calls':[{'id':'x','function':{'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}}]}
+        client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:SimpleNamespace(choices=[SimpleNamespace(message=Message(value),finish_reason='length')]))))
+        with self.assertRaises(RuntimeError):list(complete(client,[],'model',[{}],lambda x:self.fail('executed truncated response')))
+
+    def test_empty_assistant_is_not_success(self):
+        value={'role':'assistant','content':None}
+        client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:SimpleNamespace(choices=[SimpleNamespace(message=Message(value),finish_reason='stop')]))))
+        with self.assertRaises(RuntimeError):list(complete(client,[],'model',[{}],lambda x:self.fail('executed empty response')))
     def test_machine_observations_are_data_not_system_instructions(self):
         messages=[{'role':'system','content':'Base role'},{'role':'user','content':'hello'}]
         original=[dict(m) for m in messages]
@@ -89,5 +105,18 @@ class ProtocolTests(unittest.TestCase):
         client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:SimpleNamespace(choices=[SimpleNamespace(message=None,finish_reason='content_filter: private-provider-data')]))))
         with self.assertRaises(ProviderBlocked) as raised:list(complete(client,[],'gemini-4-carbon',[{}],lambda x:self.fail('executed after provider stop')))
         self.assertNotIn('private-provider-data',str(raised.exception))
+
+class StdioTests(unittest.TestCase):
+    def test_unicode_response_can_be_printed_over_legacy_encoded_ssh_stream(self):
+        import io
+        from unittest.mock import patch
+        from exam_runtime import configure_stdio
+        buffer=io.BytesIO()
+        stream=io.TextIOWrapper(buffer,encoding='ascii',write_through=True,newline='\n')
+        with patch('sys.stdout',stream),patch('sys.stderr',stream):
+            configure_stdio()
+            print('Review: \u2713 \u03bb')
+        self.assertEqual(buffer.getvalue(),'Review: \u2713 \u03bb\n'.encode('utf-8'))
+
 
 if __name__=='__main__':unittest.main()

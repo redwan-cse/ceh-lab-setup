@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon','openrouter-deepseek')][string]$Provider='stepfun',[switch]$ReuseStepFunKey)
+param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon','openrouter-deepseek')][string]$Provider='openrouter-deepseek',[switch]$ReuseStepFunKey,[switch]$LocalLab)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $python=Get-Command python.exe -ErrorAction SilentlyContinue
@@ -24,6 +24,7 @@ if(-not $python -or $python.Source -like '*\WindowsApps\*'){
 $extra=@()
 if($NoKeyPrompt){$extra+='--no-key-prompt'}
 if($ReuseStepFunKey){$extra+='--reuse-stepfun-key'}
+if($LocalLab){$extra+='--local-lab'}
 $extra+=@('--provider',$Provider)
 & $python (Join-Path $PSScriptRoot 'setup_exam.py') --activate @extra
 if($LASTEXITCODE -ne 0){throw 'Exam setup failed.'}

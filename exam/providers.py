@@ -44,6 +44,9 @@ class ProviderCalls:
         record=dict(model=kwargs['model'])
         try:
             response=self.client.chat.completions.create(**kwargs)
+            choices=getattr(response,'choices',None)
+            finish=str(getattr(choices[0],'finish_reason','')) if choices else ''
+            if finish in ('stop','length','tool_calls','content_filter','content_filter: OTHER'):record['finish_reason']=finish
             usage=getattr(response,'usage',None)
             record.update(input_tokens=getattr(usage,'prompt_tokens',None),output_tokens=getattr(usage,'completion_tokens',None),status='returned')
             cost=getattr(usage,'cost',None)
