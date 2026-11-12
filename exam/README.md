@@ -6,18 +6,13 @@ direct API, ShellGPT **1.5.1**, and **high** reasoning. Your requested
 direct endpoint: `https://generativelanguage.googleapis.com/v1beta/openai/`.
 No OpenRouter, Vercel or StepFun key is used by this profile.
 
-**Current live-test status (2026-11-12):** Carbon's init review succeeded on both
-VMs, but ordinary chat/command requests have intermittently returned
-`content_filter: OTHER` with no assistant message. Carbon later answered a
-greeting on Parrot, then failed a read-only command request. The precise cause
-is unconfirmed: Google's reference defines `OTHER` as an unknown reason, so this
-is not proof that the greeting or command was rejected for safety.
-
-The same exam profile with `--model gemini-3.8-flash` successfully executed
-`pwd` on Parrot and `Get-Location` on Server 2022 through the real sgpt tool.
-Both were automatically approved by the existing inspection guard and logged.
-Carbon remains the default; no model is silently substituted, no safety setting
-is changed, and failed requests are not automatically retried.
+**Current live-test status (2026-11-12):** Carbon's init review passed on both
+VMs, but ordinary command requests still return `content_filter: OTHER`.
+**Carbon command execution remains unresolved.** A valid key and successful
+native API greeting do not establish that the full sgpt request will work.
+Flash has executed real guarded commands on both VMs; the latest Parrot recheck
+passed, while the latest Windows repeat stalled and was stopped. See the
+diagnostic record below before relying on this setup for an exam.
 
 To explicitly use the tested Flash model for a request:
 
@@ -25,12 +20,10 @@ To explicitly use the tested Flash model for a request:
 sgpt --model gemini-3.8-flash "hello"
 ```
 
-That option applies to ordinary chat, shell and tool requests. The exact local
-shortcut `sgpt "init the machine"` uses the configured default for its one review.
-Successful key checks using Flash's native API do not establish that Carbon's
-OpenAI-compatible tool requests will succeed. If Carbon stops with `OTHER`,
-keep the model/endpoint, timestamp and harmless reproduction for provider support;
-never include your API key.
+Carbon remains the default; there is no silent model substitution or safety
+setting change. That override applies to ordinary chat, shell and tool requests.
+The exact `sgpt "init the machine"` shortcut uses the configured default for its
+one review. Provider-filtered responses stop without an automatic retry.
 
 ## Install in a new exam VM
 
@@ -320,6 +313,34 @@ that Carbon could answer a greeting on Parrot while still failing `pwd` tool
 execution. Flash executed `pwd` (evidence `2e37288cd81a`) and `Get-Location`
 (evidence `e8ff45996f12`) through sgpt on the two VMs. These prove those command
 paths work with Flash, not that Carbon's provider-side issue has been resolved.
+
+### Provider request diagnosis on 2026-11-12
+
+Carbon answered minimal greetings through both Google's native and
+OpenAI-compatible APIs with high reasoning. The complete captured sgpt greeting
+request failed on both paths; changing transport alone was not a fix. Removing
+tools did not resolve that failure. Static rules and saved-context text each
+worked separately in controlled greeting diagnostics.
+
+Keeping all rules and observations but separating their message roles let the
+controlled greeting succeed. The runtime now keeps static rules in the system
+message and observations in a separate, lower-trust user message. Real Windows
+`sgpt "hello"` then passed. Actual tool messages and thought signatures persist
+in chat history; transient observations do not accumulate. Carbon's subsequent
+`pwd` and `Get-Location` tool requests still failed on both VMs. Google supplied
+only `OTHER`, meaning an unknown reason, with no further diagnostic details;
+these results do not establish a particular safety rule or a complete fix.
+
+After that change, Flash again executed `pwd` on Parrot (evidence
+`81509c9bf9c3`). A repeat Windows live Flash request stalled before producing
+command output and was stopped; it is not counted as a pass. The local suite
+passed 24 tests with two installed-only tests skipped. Both installed-only
+checks passed separately on each VM using mocked API responses and real sgpt
+logging/guard paths; those checks do not validate provider availability.
+
+For provider support, retain the endpoint, model, timestamp and harmless
+reproduction. Never include your API key. Temporary request-capture helpers and
+captured payload files were removed after diagnosis.
 
 Sources: [Google OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
 and [Google response finish reasons](https://aistudio.google.com/api-reference/generate-content#Resource:Candidate).
