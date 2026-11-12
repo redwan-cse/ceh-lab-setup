@@ -5,6 +5,7 @@
 !/README.md
 !/ceh-local-lab/
 !/universal/
+!/exam/
 
 # Never publish runtime credentials, profiles, logs, caches or local archives.
 **/__pycache__/
@@ -14,6 +15,7 @@
 **/.sgptrc
 **/.env
 **/.env.*
+**/.gemini-api-key
 **/id_rsa*
 **/id_ed25519*
 **/authorized_keys

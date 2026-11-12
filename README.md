@@ -1,5 +1,8 @@
 # ceh-lab-setup
 
+**Gemini exam setup:** see [exam/README.md](exam/README.md) for Google AI Studio
+Gemini 4 Carbon, OS-specific install commands, API-key entry and approval policy.
+
 OpenSSH and ShellGPT setup for CEH practice. ShellGPT **1.5.1**, model
 **step-5-preview**, **high** reasoning, endpoint
 `https://api.stepfun.ai/step_plan/v1`.
