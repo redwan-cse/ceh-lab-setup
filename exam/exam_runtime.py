@@ -8,6 +8,22 @@ from terminal_ui import ApprovalRefusal,ApprovalDeclined
 
 class ProviderBlocked(RuntimeError):pass
 class ProviderIncomplete(RuntimeError):pass
+class ToolLimitReached(ProviderIncomplete):pass
+
+DEFAULT_TOOL_ROUNDS=20
+
+
+def tool_rounds(value):
+    count=int(value)
+    if not 1<=count<=100:raise ValueError('Tool rounds must be between 1 and 100')
+    return count
+
+
+def ask_to_continue(reader,total,block):
+    try:
+        answer=reader(f'Completed {total} model/tool rounds; current results are retained. Continue for up to {block} more paid API rounds? [y/N] ')
+    except (EOFError,OSError,KeyboardInterrupt):return False
+    return answer.strip().lower() in ('y','yes')
 
 
 def configure_stdio():
@@ -55,11 +71,17 @@ def task_status(workflow,profile,completed,review,answer=''):
         command_count=len(workflow.recent_evidence),answer_json=structured if isinstance(structured,dict) else None)))
 
 
-def complete(client, messages, model, tools, execute, limit=8, show_outputs=True, actions=None, history=None,show_command_outputs=True):
+def complete(client, messages, model, tools, execute, limit=DEFAULT_TOOL_ROUNDS, show_outputs=True, actions=None, history=None,show_command_outputs=True,continue_task=None):
+    if not isinstance(limit,int) or not 1<=limit<=100:raise ValueError('Tool rounds must be between 1 and 100')
     def record(message):
         messages.append(message)
         if history is not None and history is not messages:history.append(message)
-    for _ in range(limit):
+    rounds=0
+    while True:
+        if rounds and rounds%limit==0:
+            if continue_task is None or not continue_task(rounds,limit):
+                raise ToolLimitReached(f'Tool continuation limit reached after {rounds} rounds; task is incomplete. Completed tool results and saved evidence were kept. No further commands or API requests were made. In chat, ask to continue using these results; otherwise start a new request referencing the saved files.')
+        rounds+=1
         kwargs=dict(model=model,messages=messages,stream=False)
         if tools: kwargs.update(tools=tools,tool_choice='auto')
         response=client.chat.completions.create(**kwargs)
@@ -109,7 +131,6 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
                 for pending,_,_ in validated[position+1:]:
                     record(dict(role='tool',tool_call_id=pending['id'],content='Not executed: an earlier approval was declined.'))
                 raise ApprovalDeclined('Approval was not given. Stopped this task without further actions or API requests; you can continue chatting.')
-    raise ProviderIncomplete('Tool continuation limit reached; task is incomplete. Inspect saved evidence before continuing. No further commands were run.')
 
 
 def main():
@@ -123,6 +144,7 @@ def main():
     options.add_argument('--target-ip')
     options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
     options.add_argument('--tools-path',help='Optional file/folder to use for this account; never required')
+    options.add_argument('--tool-rounds',type=tool_rounds,default=DEFAULT_TOOL_ROUNDS,help='Model/API rounds before offering continuation (1-100; default 20)')
     options.add_argument('--model-info',action='store_true',help='Show configured model/endpoint locally, without an API call')
     extra,remaining=options.parse_known_args(sys.argv[1:])
     sys.argv=[sys.argv[0],*remaining]
@@ -254,11 +276,13 @@ def main():
                 functions.append({'type':'function','function':schema})
         model=model if any(arg in ('--model','-m') or arg.startswith('--model=') for arg in remaining) else values['DEFAULT_MODEL']
         try:
-            for chunk in complete(calls,prepared,model,functions,execute_command,show_outputs=cfg.get('SHOW_FUNCTIONS_OUTPUT')=='true',actions=actions,history=messages,show_command_outputs=False):
+            for chunk in complete(calls,prepared,model,functions,execute_command,limit=extra.tool_rounds,show_outputs=cfg.get('SHOW_FUNCTIONS_OUTPUT')=='true',actions=actions,history=messages,show_command_outputs=False,
+                                  continue_task=lambda total,block:ask_to_continue(read_approval,total,block)):
                 task['answer']=(task['answer']+chunk)[-1500:]
                 yield chunk
-        except ApprovalDeclined as exc:
-            task_status(workflow,profile,False,'approval-declined',task['answer'])
+        except (ApprovalDeclined,ToolLimitReached) as exc:
+            task_status(workflow,profile,False,'tool-limit' if isinstance(exc,ToolLimitReached) else 'approval-declined',task['answer'])
+            if isinstance(exc,ToolLimitReached) and not interactive_session:raise
             yield '\n'+str(exc)+'\n';return
         task['completed']=True
         if values.get('REVIEW_MODEL'):

@@ -135,6 +135,58 @@ class ProtocolTests(unittest.TestCase):
         client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:SimpleNamespace(choices=[SimpleNamespace(message=Message(value))]))))
         with self.assertRaises(RuntimeError):list(complete(client,[],'gemini-4-carbon',[{}],lambda x:'OK',limit=2))
 
+    def task_client(self,tool_rounds):
+        import copy
+        sent=[]
+        def create(**kwargs):
+            sent.append(copy.deepcopy(kwargs))
+            index=len(sent)
+            value=({'role':'assistant','tool_calls':[{'id':'step-'+str(index),'type':'function','function':{
+                'name':'execute_shell_command','arguments':'{"shell_command":"command-'+str(index)+'"}'}}]}
+                if index<=tool_rounds else {'role':'assistant','content':'TASK_DONE'})
+            return SimpleNamespace(choices=[SimpleNamespace(message=Message(value))])
+        return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),sent
+
+    def test_default_budget_allows_work_beyond_eight_rounds(self):
+        client,sent=self.task_client(9);executed=[]
+        output=''.join(complete(client,[],'model',[{}],lambda command:executed.append(command) or 'saved result'))
+        self.assertTrue(output.endswith('TASK_DONE'))
+        self.assertEqual(len(sent),10)
+        self.assertEqual(len(executed),9)
+
+    def test_approved_continuation_keeps_results_without_replaying_commands(self):
+        client,sent=self.task_client(2);executed=[];prompts=[];messages=[];history=[]
+        def proceed(total,block):prompts.append((total,block));return True
+        output=''.join(complete(client,messages,'model',[{}],lambda command:executed.append(command) or 'saved:'+command,
+            limit=2,continue_task=proceed,history=history))
+        self.assertTrue(output.endswith('TASK_DONE'))
+        self.assertEqual(prompts,[(2,2)])
+        self.assertEqual(executed,['command-1','command-2'])
+        self.assertEqual([m['content'] for m in sent[2]['messages'] if m['role']=='tool'],['saved:command-1','saved:command-2'])
+        self.assertEqual(messages,history)
+
+    def test_declined_continuation_makes_no_more_requests_or_commands(self):
+        import exam_runtime
+        client,sent=self.task_client(20);executed=[]
+        with self.assertRaises(exam_runtime.ToolLimitReached):
+            list(complete(client,[],'model',[{}],lambda command:executed.append(command) or 'OK',limit=2,continue_task=lambda *_:False))
+        self.assertEqual(len(sent),2)
+        self.assertEqual(len(executed),2)
+
+    def test_continuation_requires_explicit_yes_and_stops_on_closed_input(self):
+        import exam_runtime
+        def closed(_prompt):raise EOFError()
+        self.assertFalse(exam_runtime.ask_to_continue(closed,20,20))
+        self.assertFalse(exam_runtime.ask_to_continue(lambda _: '',20,20))
+        self.assertFalse(exam_runtime.ask_to_continue(lambda _: 'no',20,20))
+        self.assertTrue(exam_runtime.ask_to_continue(lambda _: 'yes',20,20))
+
+    def test_tool_rounds_option_is_bounded(self):
+        import exam_runtime
+        self.assertEqual(exam_runtime.tool_rounds('30'),30)
+        for value in ('0','101','-1','unlimited'):
+            with self.assertRaises(ValueError):exam_runtime.tool_rounds(value)
+
     def test_provider_filter_without_message_stops_without_execution(self):
         calls=[]
         def create(**kwargs):

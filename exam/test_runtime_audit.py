@@ -49,6 +49,49 @@ class RuntimeAuditTests(unittest.TestCase):
     def test_shell_command_is_audited(self):self.run_cli(True)
     def test_tool_command_is_audited(self):self.run_cli(False)
 
+    def run_limit_case(self,interactive,answer):
+        import exam_runtime
+        import sgpt.handlers.handler as handler
+        guard=importlib.import_module('sgpt.shellgpt_command_guard' if os.name=='nt' else 'sgpt.linux_command_guard')
+        sent=[];output=[]
+        def create(**kwargs):
+            sent.append(kwargs)
+            value=({'role':'assistant','tool_calls':[{'id':'budget-test','type':'function','function':{
+                'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}}]}
+                if len(sent)==1 else {'role':'assistant','content':'RESUMED_OK'})
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(model_dump=lambda **_:value))])
+        def entry():
+            h=handler.Handler(SimpleNamespace(name='ShellGPT',role='System administration assistant'),False)
+            output.extend(h.get_completion('unused',0,1,[dict(role='user',content='Limit test')],functions=[{}]))
+        class Input(io.StringIO):
+            def isatty(self):return interactive
+        with tempfile.TemporaryDirectory() as directory:
+            workflow=Workflow(Path(directory))
+            with patch('exam_workflow.Workflow',return_value=workflow),patch.object(workflow,'start_transcript'), \
+                    patch.object(handler.client.chat.completions,'create',side_effect=create), \
+                    patch.object(handler.Handler,'get_completion',handler.Handler.get_completion), \
+                    patch.object(guard,'execute_command',return_value='Exit code: 0, Output: saved-result') as execute, \
+                    patch('sgpt.app.entry_point',side_effect=entry),patch('sys.stdin',Input('')), \
+                    patch('builtins.input',return_value=answer) as prompt, \
+                    patch('sys.argv',['sgpt','--profile','openrouter-deepseek','--tool-rounds','1','Limit test']):
+                if not interactive:
+                    with self.assertRaises(exam_runtime.ToolLimitReached):exam_runtime.main()
+                else:exam_runtime.main()
+            self.assertEqual(execute.call_count,1)
+            self.assertEqual(prompt.call_count,1 if interactive else 0)
+            status=json.loads((workflow.state/'last-task.json').read_text())
+            continued=interactive and answer=='yes'
+            self.assertEqual(len(sent),2 if continued else 1)
+            self.assertEqual(status['completed'],continued)
+            if continued:
+                self.assertIn('RESUMED_OK',''.join(output))
+                self.assertIn('saved-result',str(sent[1]['messages']))
+            else:self.assertEqual(status['review'],'tool-limit')
+
+    def test_limit_prompt_continues_in_same_context(self):self.run_limit_case(True,'yes')
+    def test_limit_decline_keeps_task_incomplete(self):self.run_limit_case(True,'no')
+    def test_limit_with_closed_input_cannot_approve_continuation(self):self.run_limit_case(False,'yes')
+
     def run_repl_reviews(self,shell=False):
         import exam_runtime
         import sgpt.handlers.handler as handler

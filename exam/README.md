@@ -293,9 +293,37 @@ offline. A subnet mask does not establish authorization.
 Recognized inspection commands run automatically. Deletion, installation,
 writes, scripts, sudo, command chains and unknown commands require approval
 of the exact command. Refusal, missing input or policy failure prevents
-execution. This guard is an approval aid, not an OS sandbox. Tool continuations
-stop after eight API turns; requests have a 90-second timeout and no automatic
-retries. Empty responses or exhausted limits produce an incomplete-task message.
+execution. This guard is an approval aid, not an OS sandbox. Each request has
+a 90-second timeout and no automatic retries. Empty responses produce an
+incomplete-task message.
+
+### Longer tasks and continuation
+
+The default budget is **20 model/API rounds per task**, rather than eight.
+One round can contain several tool calls. At the budget boundary an interactive
+session asks:
+
+```text
+Completed 20 model/tool rounds; current results are retained. Continue for up to 20 more paid API rounds? [y/N]
+```
+
+Type `yes` to continue with the same conversation and actual tool results;
+successful commands are not automatically replayed. Each extra block needs a
+new confirmation and incurs normal API charges. Command/script approvals still
+apply. Declining preserves evidence and keeps an interactive chat available;
+you can ask it to continue later in that chat. Closed/piped input stops without
+another API call and returns an incomplete-task status. Provider refusals/errors
+never use this continuation prompt or trigger an automatic retry.
+
+Choose a different block size (1–100) for one invocation:
+
+```text
+sgpt --tool-rounds 30 "Complete this task using existing results"
+```
+
+The current process keeps its conversation in memory. If an earlier one-shot
+process has already exited, start a new request naming its saved reports or
+use a saved `--chat` conversation; it cannot recover unsaved process memory.
 
 ## Markdown evidence by IP
 

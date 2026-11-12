@@ -59,6 +59,12 @@
   to confirmed flags and how they were found, and generated scripts in scripts/.
 - Basic inspection follows the existing command guard. Other commands still
   require approval. Never try alternative syntax to bypass a refusal.
+- The default task budget is 20 model/API rounds. At the limit, the runtime
+  asks whether to continue with the existing conversation and tool results.
+  If approved, continue from completed work; do not replay successful commands
+  just to rebuild context. Recheck only when needed. This consent does not
+  approve installations, deletion or scripts, and never overrides provider
+  errors/refusals or a declined command. If paused, preserve saved evidence.
 - Save a confirmed problem flag with save_finding. findings.txt must contain
   only the flag and how it was found, with no narrative, guesses or extra report.
   Use command evidence or the user's reported observations; never invent a flag.
