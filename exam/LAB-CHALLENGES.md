@@ -1,5 +1,10 @@
 # Terminal challenge comparison — 2026-11-12, Asia/Dhaka
 
+These timings describe the earlier custom high-effort configuration. The
+current single-command kit uses provider-default reasoning because ShellGPT
+1.5.1 has no native effort switch. Do not treat these timings as a new test
+of the current default settings.
+
 **Recommendation: DeepSeek primary, StepFun as a manually selected alternative.**
 Both completed three of four challenges. DeepSeek was faster on the completed
 ones. Neither completed the reverse Windows-to-Parrot SSH fingerprint task.
@@ -119,7 +124,7 @@ model's answer. Terminal evidence remains under Desktop/CEH-Exam/<target-IP>.
 - Profiles select one endpoint/key per request; saving more profiles adds no
   additional API requests. There is no automatic cross-platform failover.
 
-## Current exam-kit validation
+## Validation before the single-command revision
 
 On the same date, the updated kit was applied without package installation to
 Parrot `attacker` and Server 2022 `Administrator`. Plain `sgpt` / `sgpt-lab`

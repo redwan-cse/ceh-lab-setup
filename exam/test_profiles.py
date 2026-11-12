@@ -4,6 +4,15 @@ from providers import PROFILES, select_profile, ProviderCalls, review_task
 
 
 class ProfileTests(unittest.TestCase):
+    def test_default_requests_do_not_force_reasoning_effort(self):
+        active=select_profile({'REASONING_EFFORT':'max'},'openrouter-deepseek',{})
+        self.assertNotIn('REASONING_EFFORT',active)
+        sent=[]
+        raw=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:sent.append(kw) or SimpleNamespace(usage=None))))
+        ProviderCalls(active,lambda text:None,raw).chat.completions.create(model=active['DEFAULT_MODEL'],messages=[])
+        self.assertNotIn('reasoning_effort',sent[0])
+        self.assertNotIn('reasoning',sent[0]['extra_body'])
+
     def test_provider_keys_never_cross_endpoints(self):
         active={'API_BASE_URL':PROFILES['gemini-mix']['base'],'OPENAI_API_KEY':'google-dummy'}
         step=select_profile(active,'stepfun',{'stepfun':'step-dummy','gemini':'google-dummy'})

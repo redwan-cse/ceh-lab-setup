@@ -74,7 +74,7 @@ class WorkflowTests(unittest.TestCase):
             client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
             w.review(client,'gemini-4-carbon')
             self.assertEqual(len(calls),1)
-            self.assertEqual(calls[0]['reasoning_effort'],'low')
+            self.assertNotIn('reasoning_effort',calls[0])
             self.assertEqual(calls[0]['max_completion_tokens'],1536)
             self.assertNotIn('tools',calls[0])
             self.assertLessEqual(len(calls[0]['messages'][1]['content']),5000)

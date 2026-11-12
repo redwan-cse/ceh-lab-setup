@@ -1,13 +1,30 @@
 [CmdletBinding()]
-param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon','openrouter-deepseek')][string]$Provider='openrouter-deepseek',[switch]$ReuseStepFunKey,[switch]$LocalLab)
+param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon','openrouter-deepseek')][string]$Provider,[switch]$ReuseStepFunKey)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-$python=Get-Command python.exe -ErrorAction SilentlyContinue
-if($python -and $python.Source -notlike '*\WindowsApps\*'){
-    & $python.Source -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>$null
-    if($LASTEXITCODE -ne 0){$python=$null}
+$privatePython=Join-Path $env:LOCALAPPDATA 'CEHLab\shellgpt-exam\venv\Scripts\python.exe'
+$appReady=$false
+if(Test-Path -LiteralPath $privatePython){
+    try{
+        & $privatePython -c 'from importlib.metadata import version; assert all(version(n)==v for n,v in {"shell-gpt":"1.5.1","openai":"2.54.0","typer":"0.16.0","click":"8.1.8"}.items())' 2>$null
+        $appReady=$LASTEXITCODE -eq 0
+    }catch{$appReady=$false}
 }
-if(-not $python -or $python.Source -like '*\WindowsApps\*'){
+$python=Get-Command python.exe -ErrorAction SilentlyContinue
+$privateRuntime=Join-Path $env:LOCALAPPDATA 'CEHLab\shellgpt-python\python.exe'
+if((-not $python -or $python.Source -like '*\WindowsApps\*') -and (Test-Path -LiteralPath $privateRuntime)){$python=[pscustomobject]@{Source=$privateRuntime}}
+if($python -and $python.Source -notlike '*\WindowsApps\*'){
+    try{& $python.Source -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>$null;if($LASTEXITCODE -ne 0){$python=$null}}catch{$python=$null}
+}
+$needsPython=-not $python -or $python.Source -like '*\WindowsApps\*'
+if($needsPython -or -not $appReady){
+    Write-Host 'Required setup: private ShellGPT 1.5.1 environment with pinned dependencies.'
+    if($needsPython){Write-Host 'Missing prerequisite: current-user Python 3.10+.'}
+    Write-Host 'No OS upgrade, firewall, SSH, Defender, or network-setting changes.'
+    if([Console]::IsInputRedirected){throw 'Interactive approval required. Nothing installed.'}
+    if((Read-Host 'Install these prerequisites now? [y/N]') -notmatch '^(?i:y|yes)$'){throw 'Cancelled; nothing installed.'}
+}
+if($needsPython){
     $version='3.14.10'
     $suffix=if($env:PROCESSOR_ARCHITECTURE -eq 'ARM64'){'-arm64'}elseif([Environment]::Is64BitOperatingSystem){'-amd64'}else{''}
     $installer=Join-Path ([IO.Path]::GetTempPath()) ('exam-python-'+[guid]::NewGuid().ToString('N')+'.exe')
@@ -15,8 +32,8 @@ if(-not $python -or $python.Source -like '*\WindowsApps\*'){
     Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$version/python-$version$suffix.exe" -OutFile $installer -UseBasicParsing
     $signature=Get-AuthenticodeSignature -LiteralPath $installer
     if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Python Software Foundation*'){throw 'Python installer signature failed.'}
-    $target=Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314'
-    $process=Start-Process $installer -ArgumentList @('/quiet','InstallAllUsers=0',('TargetDir="'+$target+'"'),'Include_pip=1','PrependPath=1','Include_test=0') -WindowStyle Hidden -Wait -PassThru
+    $target=Join-Path $env:LOCALAPPDATA 'CEHLab\shellgpt-python'
+    $process=Start-Process $installer -ArgumentList @('/quiet','InstallAllUsers=0',('TargetDir="'+$target+'"'),'Include_pip=1','PrependPath=0','Include_launcher=0','Include_test=0') -WindowStyle Hidden -Wait -PassThru
     if($process.ExitCode -notin @(0,3010)){throw 'Python install failed.'}
     Remove-Item -LiteralPath $installer -Force
     $python=Join-Path $target 'python.exe'
@@ -24,7 +41,6 @@ if(-not $python -or $python.Source -like '*\WindowsApps\*'){
 $extra=@()
 if($NoKeyPrompt){$extra+='--no-key-prompt'}
 if($ReuseStepFunKey){$extra+='--reuse-stepfun-key'}
-if($LocalLab){$extra+='--local-lab'}
-$extra+=@('--provider',$Provider)
+if($Provider){$extra+=@('--provider',$Provider)}
 & $python (Join-Path $PSScriptRoot 'setup_exam.py') --activate @extra
 if($LASTEXITCODE -ne 0){throw 'Exam setup failed.'}

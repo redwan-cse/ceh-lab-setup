@@ -26,17 +26,18 @@ class ReferenceTests(unittest.TestCase):
                 self.assertNotIn('Source: crypto.md',text)
                 self.assertIn('No reference match',exam_workflow.find_reference('unknown-tool'))
 
-    def test_local_and_exam_wrappers_select_separate_profiles(self):
+    def test_only_canonical_wrapper_reads_active_config(self):
         import os
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)/'install';root.mkdir()
             with patch.object(setup_exam,'ROOT',root),patch.object(setup_exam.Path,'home',return_value=Path(folder)):
                 bindir=setup_exam.write_wrappers('openrouter-deepseek',True,True)
                 suffix='.cmd' if os.name=='nt' else ''
-                self.assertIn('--profile stepfun',(bindir/('sgpt'+suffix)).read_text())
-                self.assertIn('--profile stepfun',(bindir/('sgpt-lab'+suffix)).read_text())
-                self.assertIn('--profile openrouter-deepseek',(bindir/('sgpt-exam'+suffix)).read_text())
-                self.assertIn(str(root/'venv'),(bindir/('sgpt-exam'+suffix)).read_text())
+                wrapper=(bindir/('sgpt'+suffix)).read_text()
+                self.assertNotIn('--profile',wrapper)
+                self.assertIn('Launch-Sgpt.ps1' if os.name=='nt' else 'launch-sgpt.sh',wrapper)
+                self.assertFalse((bindir/('sgpt-lab'+suffix)).exists())
+                self.assertFalse((bindir/('sgpt-exam'+suffix)).exists())
 
     def test_reference_copy_uses_only_markdown(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from exam_runtime import ProviderBlocked, complete, request_messages, profile_chat_paths
+from exam_runtime import ProviderBlocked, ProviderIncomplete, complete, request_messages, profile_chat_paths
 
 
 class Message:
@@ -9,6 +9,14 @@ class Message:
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_malformed_tool_batch_executes_nothing(self):
+        value={'role':'assistant','tool_calls':[
+            {'id':'ok','function':{'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}},
+            {'id':'bad','function':{'name':'execute_shell_command','arguments':'{"shell_command":"id"} trailing'}}]}
+        client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:SimpleNamespace(choices=[SimpleNamespace(message=Message(value))]))))
+        with self.assertRaisesRegex(ProviderIncomplete,'Malformed tool arguments'):
+            list(complete(client,[],'model',[{}],lambda cmd:self.fail('Part of invalid batch executed')))
+
     def test_profiles_never_share_saved_chat_paths(self):
         from pathlib import Path
         step=profile_chat_paths(Path('/config'),'stepfun')
@@ -76,7 +84,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertIn('result:id',output)
         self.assertEqual(messages[0],assistant)
         self.assertEqual([x['tool_call_id'] for x in messages[1:]],['one','two'])
-        self.assertEqual(calls[0]['reasoning_effort'],'high')
+        self.assertNotIn('reasoning_effort',calls[0])
 
     def test_unknown_tool_never_executes(self):
         value={'role':'assistant','tool_calls':[{'id':'x','function':{'name':'other','arguments':'{}'}}]}

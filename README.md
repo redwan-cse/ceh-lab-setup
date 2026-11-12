@@ -6,9 +6,9 @@ Markdown terminal logs in folders named by IP. [Real tool challenges](exam/LAB-C
 The [CEH tools reference](docs/ceh-tools/README.md) includes the local inventory,
 commands, workflows and Windows alternatives. It does not install tools.
 
-OpenSSH and ShellGPT setup for CEH practice. ShellGPT **1.5.1**, model
-**step-5-preview**, **high** reasoning, endpoint
-`https://api.stepfun.ai/step_plan/v1`.
+ShellGPT setup for CEH practice: one `sgpt` command, DeepSeek for exams and
+StepFun as a manual choice for local practice. The exam setup below uses
+provider-default reasoning and preserves Markdown evidence by IP.
 
 ## Quick start
 
@@ -37,19 +37,51 @@ Parrot / Debian-based Linux, as your normal user:
 bash ./exam/setup-exam.sh
 ```
 
-These select OpenRouter `deepseek/deepseek-v4.1-flash-1017`, prompt for its key and save `terminal.md` plus
-`findings.txt` under `Desktop/CEH-Exam/<IP>`. They configure ShellGPT only.
-Choose one provider at a time; [the exam guide](exam/README.md) explains the
-StepFun and Google-only Flash/Carbon options. There is no automatic cross-provider switch.
+Fresh installs select OpenRouter `deepseek/deepseek-v4.1-flash-1017`, prompt for its key
+and save `terminal.md` plus `findings.txt` under `Desktop/CEH-Exam/<IP>`.
+They check the private Python environment and local collector prerequisites
+first. Only missing prerequisites are offered for installation, with one
+consent prompt; declining or running noninteractively installs nothing. Sudo,
+UAC or credential authentication may still need its own OS prompt. There are
+no CEH bulk-tool installs, OS upgrades/removals, or SSH, firewall, Defender or
+network-setting changes. See [the exam guide](exam/README.md) for details.
 If Git is unavailable, download and extract the repository ZIP, then run the
 same setup command from its folder.
 
-To test DeepSeek while retaining StepFun as plain `sgpt` on a local lab VM,
-add `-LocalLab -ReuseStepFunKey` on Windows, or
-`--local-lab --reuse-stepfun-key` on Linux. Then use `sgpt-exam` for DeepSeek
-and `sgpt` / `sgpt-lab` for StepFun. Fresh exam machines need only the normal
-command above and an OpenRouter key. These setup commands install ShellGPT
-and required Python components; the tool inventory itself is read-only.
+After setup, open a new terminal and check the actual configured selection
+without a paid request:
+
+```text
+sgpt --model-info
+sgpt "init the machine"
+```
+
+Initialization runs native local checks for host addresses, routes, DNS, cached
+neighbors and capabilities. It does not scan neighbors. To choose a different
+provider later, run one switch command from the repository:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 stepfun
+# To return to the exam default, replace stepfun with deepseek.
+```
+
+```bash
+bash ./exam/switch-model.sh stepfun
+# To return to the exam default, replace stepfun with deepseek.
+```
+
+The switch updates one active endpoint/model/key together, with no reinstall
+or API call. A missing key is requested securely. There is no automatic
+fallback. All normal use remains `sgpt`; provider histories stay isolated.
+Setup can recover missing private Python components, but missing Internet,
+permissions, quota or an unsupported OS can still stop work with a clear error.
+
+## Legacy universal StepFun / SSH setup
+
+The commands below are the older universal setup. Its StepFun high-reasoning
+setting is a custom adapter option, not a native ShellGPT 1.5.1 feature. The
+current exam setup above uses provider defaults. Use the exam setup for the
+single-command workflow and evidence logging.
 
 ### Windows 11 / Windows Server 2019 or 2022
 
@@ -94,7 +126,7 @@ Recognized inspection commands run automatically. Deletion, installation,
 scripts and other unrecognized commands ask for approval. The guard runs with
 your user's permissions; it is not an OS sandbox.
 
-## API key and reruns
+## Legacy universal API key and reruns
 
 Enter the key at the setup prompt. Press Enter to retain the saved StepFun key.
 Keys are stored locally in `OPENAI_API_KEY` inside:
@@ -111,7 +143,7 @@ key only when its existing provider is recognized as StepFun. Back up custom
 settings before reinstalling. Live requests need Internet access and a valid
 StepFun key. Setup checks offline and does not call the paid API automatically.
 
-## Options for timed labs
+## Legacy universal options for timed labs
 
 From the repository root on Windows:
 

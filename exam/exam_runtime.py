@@ -49,7 +49,7 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
         messages.append(message)
         if history is not None and history is not messages:history.append(message)
     for _ in range(limit):
-        kwargs=dict(model=model,messages=messages,reasoning_effort='high',stream=False)
+        kwargs=dict(model=model,messages=messages,stream=False)
         if tools: kwargs.update(tools=tools,tool_choice='auto')
         response=client.chat.completions.create(**kwargs)
         if not getattr(response,'choices',None):raise RuntimeError('Provider did not return a parsed chat completion')
@@ -68,10 +68,23 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
         if message.get('content'): yield message['content']
         if not calls:return
         if not tools:raise RuntimeError('Unexpected tool call with tools disabled')
-        record(message)  # Includes Google thought signatures/extra_content.
+        validated=[]
+        # Validate the entire batch before running anything. Never guess/trim
+        # malformed JSON: it could change the command the user would approve.
         for call in calls:
-            name=call['function']['name']
-            arguments=json.loads(call['function']['arguments'])
+            try:
+                name=call['function']['name']
+                arguments=json.loads(call['function']['arguments'])
+                if not isinstance(arguments,dict):raise ValueError('Expected object')
+                if name=='execute_shell_command':
+                    if set(arguments)!={'shell_command'} or not isinstance(arguments['shell_command'],str):raise ValueError('Invalid command schema')
+                elif not actions or name not in actions:raise ValueError('Unknown tool')
+                if not isinstance(call.get('id'),str) or not call['id']:raise ValueError('Missing tool ID')
+            except (ValueError,KeyError,TypeError):
+                raise ProviderIncomplete('Malformed tool arguments; no commands in this response were executed. Task is incomplete; no automatic retry was made.') from None
+            validated.append((call,name,arguments))
+        record(message)  # Retain provider-specific metadata only after validation.
+        for call,name,arguments in validated:
             if name=='execute_shell_command':
                 if set(arguments)!={'shell_command'} or not isinstance(arguments['shell_command'],str):raise RuntimeError('Invalid tool arguments')
                 result=execute(arguments['shell_command'])
@@ -93,6 +106,7 @@ def main():
     options.add_argument('--profile',choices=PROFILES)
     options.add_argument('--target-ip')
     options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
+    options.add_argument('--model-info',action='store_true',help='Show configured model/endpoint locally, without an API call')
     extra,remaining=options.parse_known_args(sys.argv[1:])
     sys.argv=[sys.argv[0],*remaining]
     path=Path.home()/'.config'/'shell_gpt_exam'/'.sgptrc'
@@ -102,12 +116,16 @@ def main():
     values=select_profile(values,profile,keys)
     # Provider/function overrides must not bypass the protected exam config.
     for name in values:os.environ.pop(name,None)
+    os.environ.pop('REASONING_EFFORT',None)
     for name,value in profile_chat_paths(path.parent,profile).items():os.environ[name]=value
     from exam_workflow import Workflow,find_reference
     workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip)
     workflow.start_transcript()
     task_status(workflow,profile,False,'pending')
     workflow.begin_task(profile,' '.join(sys.argv[1:]) if not extra.tool_help else '--tool-help '+extra.tool_help)
+    if extra.model_info:
+        print('Active provider: '+profile+'\nModel: '+values['DEFAULT_MODEL']+'\nEndpoint: '+values['API_BASE_URL']+'\nReasoning effort: provider default (no native ShellGPT effort option)')
+        task_status(workflow,profile,True,'local-info');return
     if extra.tool_help:
         print(find_reference(extra.tool_help))
         task_status(workflow,profile,True,'local-reference');return

@@ -18,11 +18,13 @@ permission to scan. Use only the assigned machines, accounts and files.
 ## Use with ShellGPT
 
 The exam installer copies these Markdown files beside its runtime. It does not
-send the whole library with every request. Local lookup costs no API tokens:
+send the whole library with every request. Use the same `sgpt` command after
+selecting DeepSeek or StepFun; `sgpt --model-info` shows its configured model
+and endpoint without a paid call. Local lookup costs no API tokens:
 
 ```text
-sgpt-exam --tool-help "nmap"
-sgpt-exam --tool-help "hashing"
+sgpt --tool-help "nmap"
+sgpt --tool-help "hashing"
 ```
 
 During a normal task the model can call `find_ceh_reference` for up to 5,000
@@ -33,7 +35,7 @@ OS, tool version, scope and actual output, and ask before installation or
 critical configuration changes.
 
 ```text
-sgpt-exam "Use the tool reference to explain how to inspect my supplied PCAP. Check which tool is available first."
+sgpt "Use the tool reference to explain how to inspect my supplied PCAP. Check which tool is available first."
 ```
 
 For GUI tasks, give sgpt the actual tools root and the observations it requests.
