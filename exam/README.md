@@ -1,8 +1,9 @@
-# Exam ShellGPT: StepFun first, optional Gemini review
+# Exam ShellGPT: choose StepFun, Gemini or DeepSeek
 
-**Recommended default: StepFun `step-5-preview`, high reasoning.** Both profiles
-passed all six matched local cases. StepFun used fewer requests and finished
-faster. See [measured results](COMPARISON.md). Carbon's earlier direct command
+**Installed default: StepFun `step-5-preview`, high reasoning.** StepFun, the
+Gemini mix and OpenRouter DeepSeek each passed all six matched local cases.
+DeepSeek was fastest in this run; StepFun was faster than the Gemini mix.
+See [measured results](COMPARISON.md). Carbon's earlier direct command
 failures remain unresolved; the mix uses **Flash to execute and Carbon to
 review every completed task**, including each REPL turn.
 
@@ -59,6 +60,24 @@ Review failure is reported without retrying or substituting another model.
 In normal REPL mode each completed answer is reviewed. In shell REPL mode the
 review follows execution with `e`, so it can check actual output.
 
+**To install/select DeepSeek through OpenRouter:**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1 -Provider openrouter-deepseek
+```
+
+```bash
+bash ./exam/setup-exam.sh --provider openrouter-deepseek
+```
+
+Paste your **OpenRouter API key** at that profile's hidden prompt. The exact
+model is `deepseek/deepseek-v4.1-flash-1017`, endpoint
+`https://openrouter.ai/api/v1`. High reasoning is sent using OpenRouter's
+`reasoning.effort`; the response budget is 4,096 tokens. Tool/reasoning metadata
+is retained during continuation. Routing requires parameter support and
+disables backup upstream attempts; no model or cross-platform fallback is set.
+OpenRouter-reported request cost, when present, appears in the transcript.
+
 ## Keys and quick switching
 
 Each OS account has its own protected configuration under its home directory:
@@ -66,14 +85,14 @@ Each OS account has its own protected configuration under its home directory:
 | File | Purpose |
 |---|---|
 | `.config/shell_gpt_exam/.sgptrc` | Active profile and its `OPENAI_API_KEY` |
-| `.config/shell_gpt_exam/provider-keys.json` | Separate StepFun and Google keys |
+| `.config/shell_gpt_exam/provider-keys.json` | Separate StepFun, Google and OpenRouter keys |
 
 These are plaintext credentials protected by current-user/SYSTEM ACLs on
 Windows, or directory mode 700/file mode 600 on Linux. Never put keys in Git,
 screenshots or command arguments. StepFun uses
 `https://api.stepfun.ai/step_plan/v1`; Gemini uses
-`https://generativelanguage.googleapis.com/v1beta/openai/`. Keys never cross
-those endpoints.
+`https://generativelanguage.googleapis.com/v1beta/openai/`. OpenRouter uses
+its own endpoint above. Keys never cross those endpoints.
 
 On an **existing exam installation**, switch the default without reinstalling:
 
@@ -85,7 +104,8 @@ python .\exam\setup_exam.py --profile-only --provider stepfun
 python3 ./exam/setup_exam.py --profile-only --provider stepfun
 ```
 
-Use `--provider gemini-mix` for the mix. Paste that provider's key if missing;
+Use `--provider gemini-mix` or `--provider openrouter-deepseek` for another
+selected default. Paste that provider's key if missing;
 Enter retains a saved key. `--reuse-stepfun-key` explicitly imports the existing
 same-account key from `.config/shell_gpt/.sgptrc` after checking its endpoint.
 `--no-key-prompt` skips entry. To replace the active key later:
@@ -99,7 +119,18 @@ Use `python3` on Linux. Once both keys are saved, override one request:
 ```text
 sgpt --profile stepfun "Show my current directory"
 sgpt --profile gemini-mix "Show my current directory"
+sgpt --profile openrouter-deepseek "Show my current directory"
 ```
+
+To save a key for another profile without changing the current default:
+
+```text
+python ./exam/setup_exam.py --key-only --provider openrouter-deepseek
+```
+
+Use `python3` on Linux. The host-only `.openrouter-api-key` file used during
+local deployment is ignored by Git and is not pulled into an exam VM. Paste
+your key at the hidden prompt when setting up a new machine.
 
 ## Use, approval and evidence
 
@@ -202,11 +233,13 @@ missing/empty reviews:
 $py="$env:LOCALAPPDATA\CEHLab\shellgpt-exam\venv\Scripts\python.exe"
 & $py .\exam\compare_profiles.py --profile stepfun
 & $py .\exam\compare_profiles.py --profile gemini-mix
+& $py .\exam\compare_profiles.py --profile openrouter-deepseek
 ```
 
 ```bash
 ~/.local/share/shellgpt-exam/venv/bin/python ./exam/compare_profiles.py --profile stepfun
 ~/.local/share/shellgpt-exam/venv/bin/python ./exam/compare_profiles.py --profile gemini-mix
+~/.local/share/shellgpt-exam/venv/bin/python ./exam/compare_profiles.py --profile openrouter-deepseek
 ```
 
 This covers integration and simple evidence reasoning, not complete exam

@@ -18,7 +18,7 @@ def interpretation_passed(answer):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--profile',choices=('stepfun','gemini-mix'),required=True)
+    parser.add_argument('--profile',choices=('stepfun','gemini-mix','openrouter-deepseek'),required=True)
     args=parser.parse_args()
     identity=local_ip();folder=desktop()/'CEH-Exam'/identity;state=state_root()/identity
     if redirected(folder) or redirected(state):raise RuntimeError('Redirected evidence folder refused')
@@ -45,7 +45,7 @@ def main():
                 except ValueError:pass
             status=json.loads((state/'last-task.json').read_text()) if (state/'last-task.json').exists() else {}
             review_pass=status.get('review')=='passed'
-            passed=result.returncode==0 and status.get('completed') is True and status.get('profile')==args.profile and (review_pass or args.profile=='stepfun' and status.get('review')=='not-required')
+            passed=result.returncode==0 and status.get('completed') is True and status.get('profile')==args.profile and (review_pass or not PROFILES[args.profile]['review'] and status.get('review')=='not-required')
             tool_pass=None
             if name=='actual-command':
                 rows=[json.loads(line) for line in index.read_text().splitlines()][before:] if index.exists() else []
@@ -58,6 +58,7 @@ def main():
             if name=='initialize':passed=passed and identity in output and 'Saved commands and output' in output
             if name=='interpretation':passed=passed and interpretation_passed(status.get('answer_json'))
             record=dict(case=name,passed=bool(passed),tool_verified=tool_pass,seconds=round(time.monotonic()-start,2),api_calls=len(calls),input_tokens=sum(c.get('input_tokens') or 0 for c in calls),output_tokens=sum(c.get('output_tokens') or 0 for c in calls),review_passed=review_pass if args.profile=='gemini-mix' or name=='initialize' else None)
+            if calls and all('cost_usd' in call for call in calls):record['provider_cost_usd']=sum(call['cost_usd'] for call in calls)
         except subprocess.TimeoutExpired:
             record=dict(case=name,passed=False,seconds=round(time.monotonic()-start,2),error='CLI timeout; no automatic retry')
         records.append(record);print('CASE_RESULT '+json.dumps(record),flush=True)

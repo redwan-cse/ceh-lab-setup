@@ -1,7 +1,7 @@
 # ceh-lab-setup
 
 **Exam setup with evidence logs:** see [exam/README.md](exam/README.md) for
-StepFun first, optional Flash + Carbon review, OS setup, API keys and two-file
+StepFun first, optional Gemini or OpenRouter DeepSeek, OS setup, API keys and two-file
 evidence folders named by IP. [Matched results](exam/COMPARISON.md).
 
 OpenSSH and ShellGPT setup for CEH practice. ShellGPT **1.5.1**, model
@@ -38,7 +38,7 @@ bash ./exam/setup-exam.sh --provider stepfun
 These select StepFun, prompt for its key and save `terminal.txt` plus
 `findings.txt` under `Desktop/CEH-Exam/<IP>`. They configure ShellGPT only.
 Choose one provider at a time; [the exam guide](exam/README.md) explains the
-Google-only Flash/Carbon option. There is no automatic cross-provider switch.
+Google-only Flash/Carbon and OpenRouter DeepSeek options. There is no automatic cross-provider switch.
 If Git is unavailable, download and extract the repository ZIP, then run the
 same setup command from its folder.
 

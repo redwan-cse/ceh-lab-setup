@@ -63,7 +63,7 @@ def load_keys(directory=None):
     if not path.exists():return {}
     if path.is_symlink() or path.parent.is_symlink():raise RuntimeError('Redirected key store refused')
     values=json.loads(path.read_text(encoding='utf-8'))
-    if not isinstance(values,dict) or any(k not in ('gemini','stepfun') or not isinstance(v,str) for k,v in values.items()):raise RuntimeError('Invalid provider key store')
+    if not isinstance(values,dict) or any(k not in {p['key'] for p in PROFILES.values()} or not isinstance(v,str) for k,v in values.items()):raise RuntimeError('Invalid provider key store')
     return values
 
 
@@ -79,12 +79,13 @@ def remember_key(values):
     if os.name=='nt':windows_acl(path)
 
 
-def key_prompt(values):
+def key_prompt(values,save_active=True):
     if values.get('API_BASE_URL') not in {p['base'] for p in PROFILES.values()}:raise RuntimeError('Refusing a key for an unexpected provider')
     key=getpass.getpass(values.get('EXAM_PROFILE','Provider')+' API key (hidden; Enter keeps saved key): ')
     if '\r' in key or '\n' in key:raise ValueError('Key must be one line')
     if key:values['OPENAI_API_KEY']=key
-    save(values);remember_key(values)
+    if save_active:save(values)
+    remember_key(values)
 
 
 def patch(path,before,after):
@@ -119,13 +120,17 @@ def main():
     args=parser.parse_args()
     assert sys.version_info>=(3,10),'Python 3.10+ required'
     if args.key_only:
-        values=read()
+        active=read()
+        values=select_profile(active,args.provider,load_keys()) if args.provider else active
+        save_active=not args.provider or args.provider==active.get('EXAM_PROFILE')
         if args.key_stdin:
             if values.get('API_BASE_URL') not in {p['base'] for p in PROFILES.values()}:raise RuntimeError('Unexpected key destination')
             key=sys.stdin.read().strip()
             if not key or '\n' in key or '\r' in key:raise ValueError('Expected one API key')
-            values['OPENAI_API_KEY']=key;save(values);remember_key(values)
-        else:key_prompt(values)
+            values['OPENAI_API_KEY']=key
+            if save_active:save(values)
+            remember_key(values)
+        else:key_prompt(values,save_active=save_active)
         return
     resources=Path(__file__).resolve().parent
     if not args.configure and not args.profile_only:

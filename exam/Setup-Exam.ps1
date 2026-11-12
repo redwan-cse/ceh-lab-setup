@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon')][string]$Provider='stepfun',[switch]$ReuseStepFunKey)
+param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon','openrouter-deepseek')][string]$Provider='stepfun',[switch]$ReuseStepFunKey)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $python=Get-Command python.exe -ErrorAction SilentlyContinue
