@@ -1,190 +1,309 @@
 # ceh-lab-setup
 
-**Exam setup with evidence logs:** see [exam/README.md](exam/README.md) for
-OpenRouter DeepSeek for the exam, StepFun for local practice, API keys and
-Markdown terminal logs in folders named by IP. [Real tool challenges](exam/LAB-CHALLENGES.md).
-The [CEH tools reference](docs/ceh-tools/README.md) includes the local inventory,
-commands, workflows and Windows alternatives. It does not install tools.
+One `sgpt` command for CEH Practical preparation. Fresh exam installs use
+OpenRouter `deepseek/deepseek-v4.1-flash-1017`; StepFun `step-5-preview` is a
+manual alternative and our local-practice choice. There is no automatic fallback.
 
-ShellGPT setup for CEH practice: one `sgpt` command, DeepSeek for exams and
-StepFun as a manual choice for local practice. The exam setup below uses
-provider-default reasoning and preserves Markdown evidence by IP.
+- [Exam: Parrot](#exam-parrot)
+- [Exam: Windows](#exam-windows)
+- [Exam: Android target](#exam-android-target)
+- [Normal local lab](#normal-local-lab)
+- [All documentation](#all-documentation)
 
-## Quick start
-
-Clone once and enter the repository:
+Clone the private repository on the machine you will configure, then enter it:
 
 ```text
 git clone https://github.com/redwan-cse/ceh-lab-setup.git
 cd ceh-lab-setup
 ```
 
-For an existing clone, run `git pull --ff-only`. This private repository requires
-GitHub access. Run the following command **on the machine you want to configure**,
-from the repository folder.
+For an existing clone, run `git pull --ff-only`. GitHub access is required.
+If Git is unavailable, download/extract the repository ZIP. Keep the full kit:
+`exam`, `universal` and `docs` are used together. All commands below start from
+this repository folder unless stated otherwise.
 
-### Exam setup with IP-based transcripts
+## Exam: Parrot
 
-Windows:
+Use the exam's assigned normal account. Our local testing used `attacker`;
+ShellGPT and API keys are per-user, so check `whoami` before setup.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1
-```
-
-Parrot / Debian-based Linux, as your normal user:
+### Install and enter the API key
 
 ```bash
 bash ./exam/setup-exam.sh
 ```
 
-Fresh installs select OpenRouter `deepseek/deepseek-v4.1-flash-1017`, prompt for its key
-and save `terminal.md` plus `findings.txt` under `Desktop/CEH-Exam/<IP>`.
-They check the private Python environment and local collector prerequisites
-first. Only missing prerequisites are offered for installation, with one
-consent prompt; declining or running noninteractively installs nothing. Sudo,
-UAC or credential authentication may still need its own OS prompt. There are
-no CEH bulk-tool installs, OS upgrades/removals, or SSH, firewall, Defender or
-network-setting changes. See [the exam guide](exam/README.md) for details.
-If Git is unavailable, download and extract the repository ZIP, then run the
-same setup command from its folder.
+Paste your **OpenRouter API key at the hidden prompt**, then open a new terminal.
+Fresh installs choose DeepSeek; reruns retain the active provider. Setup checks
+Python 3.10+, the private pinned ShellGPT environment, Bash and `iproute2`.
+Missing prerequisites require one installation consent; sudo may separately
+request your password. Declining or noninteractive input installs nothing.
+No CEH tool bundle, OS upgrade/removal, SSH or network changes are performed.
 
-After setup, open a new terminal and check the actual configured selection
-without a paid request:
+Active settings/key: `~/.config/shell_gpt_exam/.sgptrc`.
+Saved provider keys: `~/.config/shell_gpt_exam/provider-keys.json`.
+These are protected local plaintext files, excluded from Git. To replace the
+active key later:
 
-```text
+```bash
+python3 ./exam/setup_exam.py --key-only
+```
+
+### Check, initialize and work
+
+```bash
+sgpt --version
 sgpt --model-info
 sgpt "init the machine"
+sgpt --tool-help "nmap"
+sgpt --repl work "Help me inspect this machine"
 ```
 
-Initialization runs native local checks for host addresses, routes, DNS, cached
-neighbors and capabilities. It does not scan neighbors. To choose a different
-provider later, run one switch command from the repository:
+`--model-info` reads the actual configuration without an API call. Initialization
+runs the native Bash collector for host identity, addresses, routes/DNS, cached
+neighbors and available tools, followed by one bounded model review. It does
+not scan other machines. See [scope and evidence rules](exam/README.md#initialize-and-inspect-safely).
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 stepfun
-# To return to the exam default, replace stepfun with deepseek.
-```
+New commands/output go to `~/Desktop/CEH-Exam/<IP>/terminal.md` (or the configured
+Desktop location). Confirmed flags and how they were found go to `findings.txt`.
+Old evidence is preserved. Inspection commands follow the existing approval guard;
+installation, deletion, writes, scripts and unknown commands require approval.
+
+### Switch models without reinstalling
 
 ```bash
 bash ./exam/switch-model.sh stepfun
-# To return to the exam default, replace stepfun with deepseek.
+# Return to the exam model:
+bash ./exam/switch-model.sh deepseek
+sgpt --model-info
 ```
 
-The switch updates one active endpoint/model/key together, with no reinstall
-or API call. A missing key is requested securely. There is no automatic
-fallback. All normal use remains `sgpt`; provider histories stay isolated.
-Setup can recover missing private Python components, but missing Internet,
-permissions, quota or an unsupported OS can still stop work with a clear error.
+The switch updates one active endpoint/model/key together. A missing matching
+key is requested securely; cancellation retains the current selection.
 
-## Legacy universal StepFun / SSH setup
+### Remove after use
 
-The commands below are the older universal setup. Its StepFun high-reasoning
-setting is a custom adapter option, not a native ShellGPT 1.5.1 feature. The
-current exam setup above uses provider defaults. Use the exam setup for the
-single-command workflow and evidence logging.
+Preview first, then remove as the same account:
 
-### Windows 11 / Windows Server 2019 or 2022
+```bash
+python3 ./exam/uninstall_exam.py --dry-run
+python3 ./exam/uninstall_exam.py
+```
 
-Open **Windows PowerShell as Administrator** under the account that will use
-ShellGPT, then run this one command:
+This removes the dedicated exam environment, keys and private state, while
+retaining Desktop evidence and Python itself. [Full exam guide](exam/README.md).
+
+## Exam: Windows
+
+Run Windows PowerShell under the account that will use `sgpt`. Check `whoami`.
+The exam installer changes the per-user ShellGPT setup; it does not configure
+OpenSSH, Defender, firewall rules, IP addresses or DNS.
+
+### Install and enter the API key
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1
+```
+
+Paste your **OpenRouter API key at the hidden prompt**, then open a new terminal.
+Fresh installs choose DeepSeek; reruns retain the active provider. Missing
+prerequisites require one installation consent; OS authentication may ask
+separately. Existing usable Python is preferred. If needed, signed Python is
+installed under `%LOCALAPPDATA%\CEHLab\shellgpt-python`, without adding Python
+to PATH or installing a global launcher.
+
+Active settings/key: `%USERPROFILE%\.config\shell_gpt_exam\.sgptrc`.
+Saved provider keys: `%USERPROFILE%\.config\shell_gpt_exam\provider-keys.json`.
+The files are protected for the current user/SYSTEM and excluded from Git.
+To replace the active key later, use existing Python:
+
+```powershell
+python .\exam\setup_exam.py --key-only
+```
+
+If setup used its app-local Python and `python` is not on PATH:
+
+```powershell
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\setup_exam.py --key-only
+```
+
+### Check, initialize and work
+
+```powershell
+sgpt --version
+sgpt --model-info
+sgpt "init the machine"
+sgpt --tool-help "nmap"
+sgpt --repl work "Help me inspect this machine"
+```
+
+Initialization selects the native PowerShell collector for host identity,
+addresses, routes/DNS, cached neighbors and available tools, followed by one
+bounded model review. It does not scan other machines. New evidence goes to
+`Desktop\CEH-Exam\<IP>\terminal.md` and `findings.txt` under this account's actual
+Desktop. Existing evidence and the command-approval guard are retained.
+
+### Switch models without reinstalling
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 stepfun
+# Return to the exam model:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 deepseek
+sgpt --model-info
+```
+
+The switch updates one active endpoint/model/key together. A missing matching
+key is requested securely; cancellation retains the current selection.
+
+### Remove after use
+
+Use existing system Python, as the same account:
+
+```powershell
+python .\exam\uninstall_exam.py --dry-run
+python .\exam\uninstall_exam.py
+```
+
+If setup used its app-local Python instead:
+
+```powershell
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\uninstall_exam.py --dry-run
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\uninstall_exam.py
+```
+
+The dedicated exam environment, keys and private state are removed. Desktop
+evidence and Python itself remain. [Full exam guide](exam/README.md).
+
+## Exam: Android target
+
+Use Parrot or Windows as the controller and the exam-provided Android machine
+as the target. This kit does not install ShellGPT on Android. Use the assigned
+Android IP and ADB port; the local lab's `10.10.10.9:5555` is only a practice
+example. Keep the exam machine's provided network/debugging configuration.
+
+### Check the controller and connect
+
+ADB must already be available on the controller. Check its command path with
+`command -v adb` on Parrot or `Get-Command adb` on Windows. If missing, locate
+the provided CEH tools first; request approval before installing anything.
+
+The following ADB syntax works on both systems. Replace **`ANDROID_IP`** and
+**`ADB_PORT`** with the assigned values before running:
+
+```text
+adb version
+adb devices -l
+adb connect ANDROID_IP:ADB_PORT
+adb -s ANDROID_IP:ADB_PORT shell getprop ro.build.version.release
+adb -s ANDROID_IP:ADB_PORT shell ip -4 addr show
+adb -s ANDROID_IP:ADB_PORT shell ip route
+```
+
+Expect the selected device to appear as `device`. For `unauthorized`, review
+the intended device's authorization prompt. For `offline` or a failed connection,
+check the assigned address/port and device state before retrying. Some Android
+versions use pairing/dynamic ports; do not assume every device uses TCP/5555.
+Do not reset networking, restart ADB on the target or enable debugging unless
+the exam task permits that configuration change.
+
+### Capture Android evidence
+
+Have `sgpt` run the approved ADB commands to capture their output in its Markdown
+transcript; ADB commands run separately are not captured automatically. Use
+`sgpt --target-ip ANDROID_IP "..."` to file the task under the Android IP.
+This filing option does not connect or grant permission by itself. For a GUI
+finding, provide the actual flag and steps to `sgpt` so it can save them.
+
+See [ADB, APKTool and mobile workflows](docs/ceh-tools/mobile-and-wireless.md).
+For building/configuring our own Android-x86 VM, use the
+[local Android guide](ceh-local-lab/README.md#android-mobile-target) and its
+historical source. Local IP assignment and checkpoint recovery belong to the
+practice lab; they are not automatic exam setup steps.
+
+## Normal local lab
+
+The existing practice environment is on physical Hyper-V host **Redwan-PC**.
+Follow the [complete local lab guide](ceh-local-lab/README.md) for daily use,
+accounts, SSH keys, sleep prevention, shared tools and Android recovery.
+Its addresses are specific to our practice network, not exam defaults.
+
+| Machine | Local address | Role |
+|---|---|---|
+| ParrotOS Sec | `10.10.10.13` | Linux workstation; `attacker` / `redwan` |
+| Win11-Client | `10.10.10.11` | Windows workstation |
+| WinServer-2019 | `10.10.10.19` | Windows server |
+| WinServer-2022 | `10.10.10.22` | Windows server and tools share |
+| Android-8.1-Target | `10.10.10.9` | Android 8.1 mobile target, ADB TCP/5555 |
+
+The local switch is `CEH-Lab-Switch`, network `10.10.10.0/24`, gateway
+`10.10.10.1`. Recheck current availability using the local guide; a historical
+health report is not a guarantee that every VM is running now.
+
+### Local ShellGPT and SSH setup
+
+For the current single-command workflow with evidence logs, use the matching
+OS setup above, then manually select StepFun with its model switcher. Configure
+each account separately. Our latest exam-flow testing was under Parrot
+`attacker` and Server 2022 `Administrator`; `redwan` retains its older setup.
+
+The older universal StepFun installers remain available for reproducing the
+original lab setup. Their high-effort setting is a custom adapter, not a native
+ShellGPT 1.5.1 option. The current exam kit uses provider-default reasoning;
+it does not force `high` or `max`.
+
+Windows, Administrator PowerShell for SSH configuration:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1
 ```
 
-Sets up OpenSSH, reuses or installs Python, installs ShellGPT, applies the
-StepFun configuration and asks for the API key with hidden input. Password and
-public-key SSH stay enabled. It does not copy your SSH key automatically.
+This sets up OpenSSH and legacy StepFun ShellGPT, retaining password/public-key
+SSH. Use `-SkipSsh` for ShellGPT only, `-SkipShellGpt` for SSH only, or
+`-NoApiKeyPrompt` to enter the key later. It does not copy your SSH key itself.
+See [Windows options and verification](universal/windows/README.md).
 
-### Parrot / Debian-based Linux
-
-Open a terminal as your **normal user**, then run this one command:
+Parrot, as the normal user:
 
 ```bash
 bash ./universal/linux/setup-shellgpt-parrot.sh
 ```
 
-Installs ShellGPT in a private Python environment, applies the StepFun
-configuration, checks it offline and asks for the API key with hidden input.
-Sudo is used only for missing Python/venv prerequisites. Python 3.10+ is required.
-This command configures ShellGPT; it does not install or change Linux SSH.
-Parrot Security 7.4 is the tested Linux target; macOS and other distributions
-are not supported by this installer.
+This sets up legacy StepFun ShellGPT without changing Linux SSH. Use
+`--no-api-key-prompt` to enter the key later. See
+[Linux options and verification](universal/linux/README.md).
+Legacy keys are under `.config/shell_gpt/.sgptrc`, separate from the current
+exam kit's `.config/shell_gpt_exam/.sgptrc`. Never commit either file.
 
-### Use it
+### Local health, Android and shared tools
 
-Open a **new terminal** after setup:
-
-```text
-sgpt --version
-sgpt "Show the current directory"
-sgpt --shell "List files in the current directory"
-sgpt --repl lab "Help me inspect this machine"
-```
-
-Recognized inspection commands run automatically. Deletion, installation,
-scripts and other unrecognized commands ask for approval. The guard runs with
-your user's permissions; it is not an OS sandbox.
-
-## Legacy universal API key and reruns
-
-Enter the key at the setup prompt. Press Enter to retain the saved StepFun key.
-Keys are stored locally in `OPENAI_API_KEY` inside:
-
-| OS | Key file | Protection |
-|---|---|---|
-| Windows | `%USERPROFILE%\.config\shell_gpt\.sgptrc` | Current user/SYSTEM file permissions |
-| Linux | `~/.config/shell_gpt/.sgptrc` | File mode 600, directory 700 |
-
-These files contain plaintext credentials protected by OS permissions. Never
-commit them. ShellGPT is configured separately for each user. Rerunning setup
-refreshes the pinned installation and its managed settings; it retains a saved
-key only when its existing provider is recognized as StepFun. Back up custom
-settings before reinstalling. Live requests need Internet access and a valid
-StepFun key. Setup checks offline and does not call the paid API automatically.
-
-## Legacy universal options for timed labs
-
-From the repository root on Windows:
+On physical Redwan-PC, from this repository:
 
 ```powershell
-# ShellGPT only; no SSH changes or elevation required.
-powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1 -SkipSsh
-
-# SSH only, without Python/ShellGPT.
-powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1 -SkipShellGpt
-
-# Leave API-key entry for later.
-powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Start-CehLab.ps1 -NoApiKeyPrompt
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ceh-local-lab\Test-CehLab.ps1 -SkipHyperV
 ```
 
-On Linux, append `--no-api-key-prompt` to skip key entry. To enter or replace
-it later, from the repository root run:
+- [Daily use, Hyper-V checks and SSH keys](ceh-local-lab/README.md#machines-and-daily-use)
+- [Parrot accounts and sleep prevention](ceh-local-lab/README.md#parrot-accounts-and-sleep-prevention)
+- [Android-x86 configuration and checkpoint recovery](ceh-local-lab/README.md#android-mobile-target)
+- [Read-only shared CEHv13 tools and mounted drives](ceh-local-lab/README.md#shared-cehv13-tools)
+- [Dated lab health and outstanding work](ceh-local-lab/HEALTH-REPORT.md)
 
-```bash
-python3 ./universal/linux/prompt_api_key.py
-```
+Local Windows/Defender/network helpers are documented in the local guide.
+They are not part of the exam installer. Review their effects before use.
 
-For Windows without Git, copy only
-[Start-CehLab.ps1](universal/Start-CehLab.ps1) and run
-`powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-CehLab.ps1` there.
-For Linux, copy the entire `universal/linux` folder and run its setup script.
+## All documentation
 
-Universal setup does not hard-code the local lab's IP addresses, subnet,
-gateway or DNS. Windows SSH preserves networking and existing firewall rules;
-its own inbound rule permits any reachable client by default. Use
-`-AllowedClients CLIENT_IP_OR_CIDR` to narrow that rule. Other existing rules
-may still allow access. Downloads, administrator/sudo permissions and network
-reachability remain prerequisites. Setup does not create VMs or exercise roles.
+All maintained guides are kept in this repository and published together:
 
-## More help
+- [Full exam setup, scope, evidence, reasoning and recovery guide](exam/README.md)
+- [ShellGPT task rules](exam/LAB-RULES.md)
+- [CEH tool commands and workflows](docs/ceh-tools/README.md)
+- [Local tool inventory summary](docs/ceh-tools/inventory.md), [Parrot inventory](docs/ceh-tools/inventory-linux.md), [Windows inventory](docs/ceh-tools/inventory-windows.md)
+- [Earlier model comparison](exam/COMPARISON.md) and [terminal challenges](exam/LAB-CHALLENGES.md), with their historical settings
+- [Complete local lab guide](ceh-local-lab/README.md) and [health report](ceh-local-lab/HEALTH-REPORT.md)
+- [Original Gemini Hyper-V build notes](ceh-local-lab/reference/gemini-hyper-v-guide.md), retained as historical reference
+- [Windows universal source](universal/windows/README.md) and [Linux universal source](universal/linux/README.md)
 
-- [Local Hyper-V lab: daily use, SSH keys, Parrot and Android](ceh-local-lab/README.md)
-- [Shared CEHv13 tools library](ceh-local-lab/README.md#shared-cehv13-tools)
-- [Verified lab health and outstanding work](ceh-local-lab/HEALTH-REPORT.md)
-- [Windows source, recovery options and verification](universal/windows/README.md)
-- [Linux details and verification](universal/linux/README.md)
-
-Source lives under `universal/windows` and `universal/linux`. After changing
-Windows source, rebuild its portable launcher with
-`powershell -NoProfile -ExecutionPolicy Bypass -File .\universal\Build-SingleFile.ps1`.
+API keys, passwords, private keys, VM tools archives and runtime evidence stay
+out of Git. Setup does not guarantee Internet/API access or install permissions
+on an unknown exam machine.

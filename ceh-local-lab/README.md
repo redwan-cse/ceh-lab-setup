@@ -1,6 +1,6 @@
 # Local Hyper-V lab
 
-For a new target or network, use the [main setup commands](../README.md).
+For a new practice target or network, use the [normal lab setup commands](../README.md#normal-local-lab).
 This folder covers the existing lab on physical Windows host **Redwan-PC**.
 
 ## Machines and daily use
@@ -78,7 +78,7 @@ Windows OpenSSH Administrator key-file configuration.
 `attacker` is an additional sudo user: password SSH, host public-key SSH and
 password-authenticated sudo were tested. No passwordless-sudo rule was added.
 SSH directory/file modes are 700/600. Passwords are not stored here. ShellGPT
-and its API key are per-user; use the [Linux setup command](../README.md)
+and its API key are per-user; use the [normal lab setup guidance](../README.md#local-shellgpt-and-ssh-setup)
 separately for each account that needs it.
 
 To reproduce the attacker account setup, from the repository root on the host:

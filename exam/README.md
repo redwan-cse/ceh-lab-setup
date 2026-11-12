@@ -1,115 +1,158 @@
 # Exam ShellGPT: one command, one active model
 
-Use **`sgpt`** on Windows or Parrot. The exam default is OpenRouter
-`deepseek/deepseek-v4.1-flash-1017`; StepFun `step-5-preview` is a manual choice
-for local practice. Switching changes one active configuration, not your OS
-account. There is no automatic fallback between providers.
+Use **`sgpt`** on Windows or Parrot. Fresh exam installations default to
+OpenRouter `deepseek/deepseek-v4.1-flash-1017`; StepFun `step-5-preview` is a
+manual alternative for local practice. Switching changes one active
+configuration, not your OS account. There is no automatic provider fallback.
 
-## Install or refresh after cloning
+The [main README](../README.md) is the one-stop setup guide, ordered Parrot,
+Windows, Android, then normal local lab. This page keeps the detailed runtime,
+evidence and troubleshooting rules. Keep the full repository when installing.
 
-Run on the machine you want to configure, as the account that will use sgpt:
+## Parrot exam setup
 
-```text
-git clone https://github.com/redwan-cse/ceh-lab-setup.git
-cd ceh-lab-setup
-```
+Follow the [complete Parrot instructions](../README.md#exam-parrot) for setup,
+API keys, use, model switching and removal. Run as your assigned normal account;
+our local test account is `attacker`. Check `whoami` first.
 
-For an existing clone, run `git pull --ff-only`. Keep the full repository:
-the exam setup uses the guards in `universal` and references in `docs/ceh-tools`.
-If Git is unavailable, extract the repository ZIP and enter its folder.
-
-**Windows PowerShell:**
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1
-```
-
-**Parrot / Debian-based Linux, as your normal user:**
+From the repository root:
 
 ```bash
 bash ./exam/setup-exam.sh
 ```
 
-Paste your **OpenRouter API key at the hidden prompt**, then open a new terminal.
-Setup checks Python 3.10+, the private environment (ShellGPT **1.5.1**, OpenAI
-**2.54.0**, Typer **0.16.0**, Click **8.1.8**) and native collector prerequisites.
-Windows uses built-in PowerShell networking commands; Linux needs Bash and
-`iproute2`. Only missing prerequisites are offered for installation, with
-**one consent prompt**. Declining or running noninteractively installs nothing.
-Sudo, UAC or credential authentication may still require an OS prompt.
+Paste the OpenRouter key at the hidden prompt. Existing active providers are
+retained on reruns. Missing Python/venv or `iproute2` prerequisites require one
+consent; sudo authentication can ask separately. Apt simulation rejects
+upgrades/removals, and no apt update/upgrade is run. Python packages stay in
+the dedicated environment; a healthy environment is not force-reinstalled.
 
-If Windows has no usable Python, the signed bootstrap installs an app-local
-runtime at `%LOCALAPPDATA%\CEHLab\shellgpt-python`, without adding Python to
-PATH or installing a global launcher. Existing usable Python is preferred.
-
-Rerunning the native setup command retains the active provider, refreshes managed
-runtime/reference files and can recover missing private Python components.
-Linux previews prerequisite installation and stops if it would upgrade or
-remove an existing package; it does not run an apt update/upgrade. It does not force-reinstall
-a healthy environment, install CEH tool bundles, upgrade/remove OS packages,
-or change SSH, firewall, Defender, IP or DNS settings. Downloads, permissions,
-unsupported OS versions or unavailable prerequisites can stop setup clearly;
-existing evidence is preserved. Do not assume a fresh machine is ready merely
-because its OS name matches a tested machine.
-
-## Check and switch the active model
-
-```text
-sgpt --version
-sgpt --model-info
-```
-
-`--model-info` is this kit's local metadata helper. It shows the **actual
-configured provider, model and endpoint**, with no paid request or key
-disclosure. Asking the model to identify
-itself is not a reliable configuration check.
-
-Choose one of these commands from the repository root on Windows:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 deepseek
-powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 stepfun
-```
-
-Or on Linux:
+After opening a new terminal:
 
 ```bash
-bash ./exam/switch-model.sh deepseek
-bash ./exam/switch-model.sh stepfun
+sgpt --model-info
+sgpt "init the machine"
+sgpt --tool-help "nmap"
 ```
 
-The switch updates the **endpoint, model and matching key together**, without
-installing packages or calling an API. If the provider has no saved key, it
-asks securely; cancellation keeps the active selection. Then keep using `sgpt`
-for every task. StepFun uses `https://api.stepfun.ai/step_plan/v1`; DeepSeek
-uses `https://openrouter.ai/api/v1`.
+If indexing CEH files, replace the path with the actual provided tools folder:
+
+```bash
+sgpt --init-lab --tools-path /PATH/TO/CEH_TOOLS
+```
+
+Manual switching, without reinstalling or making an API request:
+
+```bash
+bash ./exam/switch-model.sh stepfun
+bash ./exam/switch-model.sh deepseek
+```
+
+To enter/replace the active key later, preview/reset generated logs, or remove
+this account's exam installation:
+
+```bash
+python3 ./exam/setup_exam.py --key-only
+python3 ./exam/reset_exam_logs.py
+# Only if you intend to clear the previewed generated logs:
+python3 ./exam/reset_exam_logs.py --clear
+python3 ./exam/uninstall_exam.py --dry-run
+python3 ./exam/uninstall_exam.py
+```
+
+## Windows exam setup
+
+Follow the [complete Windows instructions](../README.md#exam-windows). Use the
+account that will run `sgpt`; check `whoami` first. From the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1
+```
+
+Paste the OpenRouter key at the hidden prompt. Reruns retain the active
+provider. Missing prerequisites require one consent; OS authentication may
+ask separately. Existing usable Python is preferred. Otherwise signed Python
+is installed at `%LOCALAPPDATA%\CEHLab\shellgpt-python`, without adding Python
+to PATH or installing a global launcher. The installer does not change SSH,
+Defender, firewalls, addresses or DNS, or install CEH tool bundles.
+
+After opening a new terminal:
+
+```powershell
+sgpt --model-info
+sgpt "init the machine"
+sgpt --tool-help "nmap"
+```
+
+To index CEH files, replace the example with the actual provided tools folder:
+
+```powershell
+sgpt --init-lab --tools-path 'C:\PATH\TO\CEH_TOOLS'
+```
+
+Manual switching, without reinstalling or making an API request:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 stepfun
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 deepseek
+```
+
+With existing system Python, key entry, log reset and removal use:
+
+```powershell
+python .\exam\setup_exam.py --key-only
+python .\exam\reset_exam_logs.py
+# Only if you intend to clear the previewed generated logs:
+python .\exam\reset_exam_logs.py --clear
+python .\exam\uninstall_exam.py --dry-run
+python .\exam\uninstall_exam.py
+```
+
+If `python` is not on PATH, use the app-local bootstrap executable instead:
+
+```powershell
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\setup_exam.py --key-only
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\reset_exam_logs.py
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\uninstall_exam.py --dry-run
+& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\uninstall_exam.py
+```
+
+## Android exam target
+
+Follow the [Android connection and evidence instructions](../README.md#exam-android-target)
+after setting up Parrot or Windows as the controller. ShellGPT runs on the
+controller, not on the Android target. Use the exam's assigned IP/ADB port;
+do not apply our local Hyper-V addressing to an exam machine. Mobile workflows
+are in the [ADB/APKTool reference](../docs/ceh-tools/mobile-and-wireless.md).
+
+## Active configuration and API keys
 
 Each OS account has one active configuration and a separate protected key vault:
 
 | File under your home directory | Purpose |
 |---|---|
 | `.config/shell_gpt_exam/.sgptrc` | Active endpoint/model and `OPENAI_API_KEY` |
-| `.config/shell_gpt_exam/provider-keys.json` | Separate provider keys for later switches |
+| `.config/shell_gpt_exam/provider-keys.json` | Matching provider keys for later switches |
 
-The vault holds credentials, not multiple user profiles. Keys are plaintext
-protected by current-user/SYSTEM ACLs on Windows, or directory mode 700/file
-mode 600 on Linux. Keep them out of Git, screenshots and command arguments.
-Keys never cross provider endpoints. Chats and caches remain isolated by
-provider internally, so switching does not send another provider's history.
-Legacy shared chats remain on disk and are not automatically imported.
+Paste keys at the hidden prompt, never into command arguments or Git. These
+are plaintext files protected by current-user/SYSTEM ACLs on Windows or file
+mode 600/directory mode 700 on Linux. The vault is not multiple user profiles.
+Provider histories/caches remain isolated internally, including after switching.
+Legacy shared chats are retained but not automatically imported.
 
-To enter or replace the active key later:
+A switch updates endpoint, model and matching key together. Missing keys are
+requested securely; cancellation keeps the active selection. StepFun uses
+`https://api.stepfun.ai/step_plan/v1`; DeepSeek uses `https://openrouter.ai/api/v1`.
+`sgpt --model-info` is this kit's local metadata helper: it reads the actual
+configuration without a paid call or key disclosure. A model's self-description
+is not a reliable identity check.
 
-```text
-python ./exam/setup_exam.py --key-only
-```
-
-Use `python3` on Linux. To store another provider's key without switching,
-append `--provider stepfun` or `--provider openrouter-deepseek`. Enter retains
-a saved key. Setup also accepts `-ReuseStepFunKey` on Windows or
-`--reuse-stepfun-key` on Linux to explicitly import the same account's existing
-StepFun key after checking its endpoint. `-NoKeyPrompt` / `--no-key-prompt`
-skips key entry. A host-only `.openrouter-api-key` is not deployed to exam VMs.
+Key entry accepts `--provider stepfun` or `--provider openrouter-deepseek` to
+save another provider's key without switching. Enter retains a saved key.
+Setup accepts `-ReuseStepFunKey` on Windows or `--reuse-stepfun-key` on Linux to
+import the same account's existing StepFun key after checking its endpoint.
+`-NoKeyPrompt` / `--no-key-prompt` skips entry. A host-only `.openrouter-api-key`
+is ignored by Git and is not pulled into an exam machine.
 
 ## Reasoning settings and earlier tests
 
@@ -226,49 +269,21 @@ During a task, `find_ceh_reference` retrieves bounded excerpts;
 or proves runtime readiness. Prefer existing, OS-compatible tools and ask
 before installing or making critical configuration changes.
 
-Index your actual tools directory without executing its files:
-
-```powershell
-sgpt --init-lab --tools-path C:\CEH-Tools
-```
-
-```bash
-sgpt --init-lab --tools-path /mnt/ceh-tools
-```
+Index actual tool files using the path example in your OS section above.
 
 For GUI tasks, sgpt locates an indexed tool or asks where it is, supplies manual
 steps and requests your observations. It cannot see GUI results automatically.
 
 ## Reset, remove or troubleshoot
 
-Preview first; `--clear` removes only known generated log/state filenames.
-Nonempty findings, keys and unrelated files survive. Setup never clears logs.
+Use the reset/removal commands grouped under your OS above. Reset previews
+known generated filenames first; `--clear` removes only those files. Nonempty
+findings, keys and unrelated files survive. Setup never clears logs.
 
-```text
-python ./exam/reset_exam_logs.py
-python ./exam/reset_exam_logs.py --clear
-```
-
-Use `python3` on Linux. To remove the exam installation as the same user:
-
-```text
-python ./exam/uninstall_exam.py --dry-run
-python ./exam/uninstall_exam.py
-```
-
-Removal deletes the dedicated environment, keys, configuration and private
-state. Desktop evidence and the legacy universal StepFun installation remain.
-`--keep-config` intentionally retains keys/history. Open a new terminal afterward.
-
-If `python` is not on PATH because Windows used that app-local bootstrap, run
-the same removal command with its explicit executable:
-
-```powershell
-& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\uninstall_exam.py --dry-run
-& "$env:LOCALAPPDATA\CEHLab\shellgpt-python\python.exe" .\exam\uninstall_exam.py
-```
-
-Python itself is retained, as with the existing system Python prerequisite.
+Removal deletes the dedicated exam environment, keys, configuration and private
+state. Desktop evidence, Python itself and the legacy universal StepFun
+installation remain. `--keep-config` intentionally retains keys/history.
+Open a new terminal after removal.
 
 For 401/403/404/429, check the selected provider's key, model access, network,
 quota and billing. `OTHER` means an unspecified provider reason. Preserve the
