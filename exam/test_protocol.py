@@ -147,12 +147,12 @@ class ProtocolTests(unittest.TestCase):
             return SimpleNamespace(choices=[SimpleNamespace(message=Message(value))])
         return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),sent
 
-    def test_default_budget_allows_work_beyond_eight_rounds(self):
-        client,sent=self.task_client(9);executed=[]
+    def test_default_budget_allows_39_tools_and_final_answer(self):
+        client,sent=self.task_client(39);executed=[]
         output=''.join(complete(client,[],'model',[{}],lambda command:executed.append(command) or 'saved result'))
         self.assertTrue(output.endswith('TASK_DONE'))
-        self.assertEqual(len(sent),10)
-        self.assertEqual(len(executed),9)
+        self.assertEqual(len(sent),40)
+        self.assertEqual(len(executed),39)
 
     def test_approved_continuation_keeps_results_without_replaying_commands(self):
         client,sent=self.task_client(2);executed=[];prompts=[];messages=[];history=[]

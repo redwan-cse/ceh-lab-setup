@@ -81,19 +81,23 @@ def classify(command):
     return {'automatic': True, 'reason': 'Recognized literal inspection command', 'argv': pipeline}
 
 
-def run_pipeline(pipeline):
+def run_pipeline(pipeline,cwd=None,stdout_path=None,append=False):
     processes = []
     cleanup_groups = False
     deadline = time.monotonic() + 300
     with contextlib.ExitStack() as stack:
         error_files = []
         try:
+            output_file=None
+            if stdout_path:
+                flags=os.O_WRONLY|os.O_CREAT|(os.O_APPEND if append else os.O_EXCL)|getattr(os,'O_NOFOLLOW',0)
+                output_file=stack.enter_context(os.fdopen(os.open(stdout_path,flags,0o600),'ab' if append else 'wb'))
             previous = None
-            for argv in pipeline:
+            for index,argv in enumerate(pipeline):
                 error_file = stack.enter_context(tempfile.TemporaryFile())
                 error_files.append(error_file)
                 process = subprocess.Popen(argv, stdin=previous or subprocess.DEVNULL,
-                                           stdout=subprocess.PIPE, stderr=error_file,
+                                           stdout=output_file if output_file and index==len(pipeline)-1 else subprocess.PIPE, stderr=error_file,cwd=cwd,
                                            start_new_session=True)
                 if previous is not None:
                     previous.close()
@@ -106,7 +110,9 @@ def run_pipeline(pipeline):
             for error_file in error_files:
                 error_file.seek(0)
                 errors += error_file.read()
-            return f'Exit code: {processes[-1].returncode}, Output:\n' + (output + errors).decode('utf-8', errors='replace')
+            suffix='\nPipeline exit codes: '+','.join(str(process.returncode) for process in processes) if len(processes)>1 else ''
+            if stdout_path:suffix+='\nSaved output: '+str(stdout_path)
+            return f'Exit code: {processes[-1].returncode}, Output:\n' + ((output or b'') + errors).decode('utf-8', errors='replace')+suffix
         except subprocess.TimeoutExpired:
             cleanup_groups = True
             return 'Command timed out after 300 seconds.'

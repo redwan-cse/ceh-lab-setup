@@ -57,7 +57,7 @@ class RuntimeAuditTests(unittest.TestCase):
         def create(**kwargs):
             sent.append(kwargs)
             value=({'role':'assistant','tool_calls':[{'id':'budget-test','type':'function','function':{
-                'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}}]}
+                'name':'execute_shell_command','arguments':'{"shell_command":"audit_budget_fixture"}'}}]}
                 if len(sent)==1 else {'role':'assistant','content':'RESUMED_OK'})
             return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(model_dump=lambda **_:value))])
         def entry():

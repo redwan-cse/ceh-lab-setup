@@ -300,21 +300,34 @@ This probes TCP 22, 80, 443, 445, 3389 and 5555 within that supplied range only.
 Cached neighbors do not prove reachability; timeouts do not prove a host is
 offline. A subnet mask does not establish authorization.
 
-Recognized inspection commands run automatically. Deletion, installation,
-writes, scripts, sudo, command chains and unknown commands require approval
-of the exact command. Refusal, missing input or policy failure prevents
+Recognized routine work runs automatically. On Parrot this includes literal
+`cd` plus read-only command chains, grep/sort pipelines, ordinary HTTP(S)
+GET/HEAD downloads with curl, and new/append result files inside the exam folder.
+The planner validates the entire chain before running any part and executes
+literal argument lists without a shell. On Windows, literal read-only pipelines
+and statements, Select-String, Get-FileHash, Resolve-DnsName and GET/HEAD
+Invoke-WebRequest are recognised; Out-File can create new exam result files.
+Use explicit `-Uri`, `-OutFile` and `-FilePath` parameters on Windows.
+
+Downloads ignore curl configuration files and unsupported upload/code options.
+New output files must stay inside the exam folder; existing evidence is not
+automatically overwritten. A supported append can add to an ordinary report.
+The main terminal/findings journals remain managed by the workflow tools.
+Scripts, dynamic expressions, unknown commands, deletion, installation, sudo
+and system changes still require approval of the exact command/version.
+Refusal, missing input or policy failure prevents
 execution. This guard is an approval aid, not an OS sandbox. Each request has
 a 90-second timeout and no automatic retries. Empty responses produce an
 incomplete-task message.
 
 ### Longer tasks and continuation
 
-The default budget is **20 model/API rounds per task**, rather than eight.
+The default budget is **40 model/API rounds per task**, rather than eight.
 One round can contain several tool calls. At the budget boundary an interactive
 session asks:
 
 ```text
-Completed 20 model/tool rounds; current results are retained. Continue for up to 20 more paid API rounds? [y/N]
+Completed 40 model/tool rounds; current results are retained. Continue for up to 40 more paid API rounds? [y/N]
 ```
 
 Type `yes` to continue with the same conversation and actual tool results;
@@ -328,7 +341,7 @@ never use this continuation prompt or trigger an automatic retry.
 Choose a different block size (1–100) for one invocation:
 
 ```text
-sgpt --tool-rounds 30 "Complete this task using existing results"
+sgpt --tool-rounds 60 "Complete this task using existing results"
 ```
 
 The current process keeps its conversation in memory. If an earlier one-shot

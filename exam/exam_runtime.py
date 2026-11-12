@@ -10,7 +10,7 @@ class ProviderBlocked(RuntimeError):pass
 class ProviderIncomplete(RuntimeError):pass
 class ToolLimitReached(ProviderIncomplete):pass
 
-DEFAULT_TOOL_ROUNDS=20
+DEFAULT_TOOL_ROUNDS=40
 
 
 def tool_rounds(value):
@@ -144,7 +144,7 @@ def main():
     options.add_argument('--target-ip')
     options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
     options.add_argument('--tools-path',help='Optional file/folder to use for this account; never required')
-    options.add_argument('--tool-rounds',type=tool_rounds,default=DEFAULT_TOOL_ROUNDS,help='Model/API rounds before offering continuation (1-100; default 20)')
+    options.add_argument('--tool-rounds',type=tool_rounds,default=DEFAULT_TOOL_ROUNDS,help='Model/API rounds before offering continuation (1-100; default 40)')
     options.add_argument('--model-info',action='store_true',help='Show configured model/endpoint locally, without an API call')
     extra,remaining=options.parse_known_args(sys.argv[1:])
     sys.argv=[sys.argv[0],*remaining]
@@ -214,7 +214,14 @@ def main():
     original_execute=guard.execute_command
     def execute_command(command):
         def run(value):
-            result=original_execute(value)
+            plan=None
+            if os.name!='nt':
+                from routine_commands import classify_linux,run_linux
+                plan=classify_linux(value,workflow.folder,guard.trusted_executable)
+            if plan:
+                print('[sgpt] Automatically running recognized routine workflow:\n'+value,flush=True)
+                result=run_linux(plan,guard.run_pipeline)
+            else:result=original_execute(value)
             if result.startswith('Command not executed: approval was not given.'):
                 if not interactive_session:result+=' No interactive input is available. Run sgpt in a terminal (use ssh -tt for SSH) to type an approval; no command was executed.'
                 return ApprovalRefusal(result)

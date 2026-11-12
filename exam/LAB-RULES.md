@@ -75,9 +75,16 @@
   duplicate summary file for every chat reply; create separate result files
   when requested or required by the tool/task. Keep findings.txt restricted
   to confirmed flags and how they were found, and generated scripts in scripts/.
-- Basic inspection follows the existing command guard. Other commands still
-  require approval. Never try alternative syntax to bypass a refusal.
-- The default task budget is 20 model/API rounds. At the limit, the runtime
+- Recognized routine work runs automatically: literal read-only commands,
+  text searches/pipelines, ordinary GET/HEAD downloads, and new result files
+  inside the exam folder. Prefer these direct forms instead of wrapping them
+  in Python/Bash/PowerShell scripts or dynamic expressions unnecessarily.
+  Installation, deletion, system changes, unknown code and new script versions
+  still need approval. Existing evidence is not automatically overwritten.
+  Reuse relevant saved results or choose a new numbered result filename when
+  the requested output already exists, instead of needlessly asking to overwrite.
+  Never try alternative syntax to bypass a declined approval.
+- The default task budget is 40 model/API rounds. At the limit, the runtime
   asks whether to continue with the existing conversation and tool results.
   If approved, continue from completed work; do not replay successful commands
   just to rebuild context. Recheck only when needed. This consent does not

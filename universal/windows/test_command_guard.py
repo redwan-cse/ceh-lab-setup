@@ -1,4 +1,5 @@
 import tempfile
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -13,11 +14,15 @@ class PolicyTests(unittest.TestCase):
             'Get-Process | Select-Object -First 2 -Property Name,Id',
             'Get-Date', 'Get-Service -Name "Spooler"',
             'Microsoft.PowerShell.Management\\Get-Location',
+            "Get-Content input.txt | Select-String -Pattern '[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$' | Sort-Object -Unique",
+            'Get-Location; Get-Date',
+            'Get-FileHash -LiteralPath input.txt -Algorithm SHA256',
+            'Resolve-DnsName -Name example.com -Type MX',
         ):
             with self.subTest(command=command):
                 decision = guard.classify(command)
                 self.assertTrue(decision['automatic'], decision)
-                self.assertIn('Microsoft.PowerShell.', decision['command'])
+                self.assertIn('DnsClient\\' if command.startswith('Resolve-DnsName') else 'Microsoft.PowerShell.', decision['command'])
 
     def test_risky_unknown_and_obfuscated_commands_require_approval(self):
         for command in (
@@ -64,6 +69,38 @@ class PolicyTests(unittest.TestCase):
     def test_classifier_failure_refuses_execution(self):
         with patch.object(guard, 'classify', side_effect=RuntimeError('classifier failed')):
             self.assertIn('not executed', guard.execute_command('Get-Date'))
+
+    def test_routine_download_and_report_outputs_stay_in_exam_folder(self):
+        with tempfile.TemporaryDirectory() as folder,patch.dict(os.environ,{'CEH_EXAM_DIR':folder}):
+            path=str(Path(folder)/'report.txt')
+            for command in ("Invoke-WebRequest -UseBasicParsing -Uri 'https://example.com' -OutFile '"+path+"'",
+                            "Get-Content input.txt | Out-File -Encoding utf8 -FilePath '"+path+"'"):
+                self.assertTrue(guard.classify(command)['automatic'])
+            for command in ("Invoke-WebRequest -Uri 'https://example.com' -Method POST",
+                            "Get-Date | Out-File -FilePath 'C:\\outside.txt'",
+                            "Get-Content input.txt | Out-File -FilePath '"+str(Path(folder)/'terminal.md')+"'"):
+                self.assertFalse(guard.classify(command)['automatic'])
+            Path(path).write_text('preserve')
+            self.assertFalse(guard.classify("Get-Date | Out-File -FilePath '"+path+"'")['automatic'])
+            self.assertFalse(guard.classify("Get-Date | Out-File -Append:0 -FilePath '"+path+"'")['automatic'])
+            self.assertFalse(guard.classify("Invoke-WebRequest -UseBasicParsing:0 -Uri 'https://example.com'")['automatic'])
+
+    def test_routine_report_executes_without_prompt(self):
+        with tempfile.TemporaryDirectory() as folder,patch.dict(os.environ,{'CEH_EXAM_DIR':folder}):
+            source=Path(folder)/'input.txt';source.write_text('contact training@example.test\n')
+            output=Path(folder)/'report.txt'
+            command="Get-Content -LiteralPath '"+str(source)+"' | Select-String -Pattern 'training@.*' | Out-File -Encoding utf8 -FilePath '"+str(output)+"'"
+            with patch('builtins.input',side_effect=AssertionError('Unexpected approval prompt')):
+                result=guard.execute_command(command)
+            self.assertIn('Exit code: 0',result)
+            self.assertIn('training@example.test',output.read_text(encoding='utf-8-sig'))
+
+    def test_broken_output_link_requires_approval(self):
+        with tempfile.TemporaryDirectory() as folder,patch.dict(os.environ,{'CEH_EXAM_DIR':folder}):
+            path=Path(folder)/'report.txt'
+            try:path.symlink_to(Path(folder)/'missing.txt')
+            except OSError:self.skipTest('Symlink privileges unavailable')
+            self.assertFalse(guard.classify("Get-Date | Out-File -FilePath '"+str(path)+"'")['automatic'])
 
 
 if __name__ == '__main__':

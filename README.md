@@ -86,15 +86,16 @@ not scan other machines. See [scope and evidence rules](exam/README.md#initializ
 
 New commands/output go to `~/Desktop/CEH-Exam/<IP>/terminal.md` (or the configured
 Desktop location). Confirmed flags and how they were found go to `findings.txt`.
-Old evidence is preserved. Inspection commands follow the existing approval guard;
-installation, deletion, writes, scripts and unknown commands require approval.
+Old evidence is preserved. Recognized read-only workflows, text pipelines and
+new downloads/reports inside the exam folder run automatically. Installation,
+deletion, system changes, scripts and unknown commands still require approval.
 
 All saved final results—including tool lists, reports and scan exports—belong
 in this exam folder. Tools folders remain input locations. sgpt receives the
 exact destination and must verify saved files and report their paths.
 
-Long tasks get 20 model/API rounds, then an interactive **continue? [y/N]**
-prompt. `yes` continues with the existing results. Use `--tool-rounds 30` to
+Long tasks get 40 model/API rounds, then an interactive **continue? [y/N]**
+prompt. `yes` continues with the existing results. Use `--tool-rounds 60` to
 choose a larger block; [continuation details](exam/README.md#longer-tasks-and-continuation).
 
 ### Switch models without reinstalling
@@ -202,8 +203,8 @@ All saved final results—including tool lists, reports and scan exports—belon
 in this exam folder. Tools folders remain input locations. sgpt receives the
 exact destination and must verify saved files and report their paths.
 
-Long tasks get 20 model/API rounds, then an interactive **continue? [y/N]**
-prompt. `yes` continues with the existing results. Use `--tool-rounds 30` to
+Long tasks get 40 model/API rounds, then an interactive **continue? [y/N]**
+prompt. `yes` continues with the existing results. Use `--tool-rounds 60` to
 choose a larger block; [continuation details](exam/README.md#longer-tasks-and-continuation).
 
 Run **`sgpt`** alone to open normal chat and continue typing at its prompt.
@@ -366,6 +367,7 @@ All maintained guides are kept in this repository and published together:
 - [Full exam setup, scope, evidence, reasoning and recovery guide](exam/README.md)
 - [Normal chat, optional tools paths and versioned scripts](exam/README.md#normal-chat-optional-paths-and-scripts)
 - [ShellGPT task rules](exam/LAB-RULES.md)
+- [Normal-model API budget and batch explanation](exam/API-COSTS.md)
 - [CEH tool commands and workflows](docs/ceh-tools/README.md)
 - [Local tool inventory summary](docs/ceh-tools/inventory.md), [Parrot inventory](docs/ceh-tools/inventory-linux.md), [Windows inventory](docs/ceh-tools/inventory-windows.md)
 - [Earlier model comparison](exam/COMPARISON.md) and [terminal challenges](exam/LAB-CHALLENGES.md), with their historical settings
