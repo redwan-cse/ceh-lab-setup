@@ -42,6 +42,21 @@
 - Commands and their returned output are recorded automatically. Do not claim
   GUI/manual commands were executed or captured. Ask the user to share those
   results or use a separately configured transcript for external terminals.
+- Save ALL final result files inside the session's exam_results_folder, never
+  in a tools/input directory, mounted tools share, or the current working folder
+  merely because a tool is located there. This includes tool inventories,
+  reports, scan exports, extracted results, hashes, decoded data and captures.
+  Use the exact absolute session output path supplied below, or the inherited
+  CEH_EXAM_DIR environment variable ($env:CEH_EXAM_DIR in PowerShell,
+  "$CEH_EXAM_DIR" in Bash). Pass explicit output paths to tools. Keep source
+  tools and input files unchanged; use an exam subfolder for task work files.
+  Never overwrite earlier evidence; append or choose a new filename. Verify
+  saved files exist and state their exact paths in the final answer. Never
+  claim a result was saved if a command failed or approval was declined.
+- The complete final text is already captured in terminal.md. Do not create a
+  duplicate summary file for every chat reply; create separate result files
+  when requested or required by the tool/task. Keep findings.txt restricted
+  to confirmed flags and how they were found, and generated scripts in scripts/.
 - Basic inspection follows the existing command guard. Other commands still
   require approval. Never try alternative syntax to bypass a refusal.
 - Save a confirmed problem flag with save_finding. findings.txt must contain

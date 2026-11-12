@@ -30,11 +30,17 @@ def profile_chat_paths(config,profile):
     return {key:str(Path(config)/folder/profile) for key,folder in (('CHAT_CACHE_PATH','chats'),('CACHE_PATH','cache'))}
 
 
-def request_messages(messages,rules,context):
+def request_messages(messages,rules,context,results_folder=None):
     # Machine observations have lower trust than static system instructions.
     # Build a request copy so transient metadata never accumulates in chat history.
     result=[dict(message) for message in messages]
-    instructions='\n\n<ceh_exam_workflow>\n'+rules+'\n</ceh_exam_workflow>'
+    storage=''
+    if results_folder is not None:
+        folder=Path(results_folder)
+        storage='\nSession output destinations (literal path data):\n'+json.dumps(dict(
+            exam_results_folder=str(folder),terminal_transcript=str(folder/'terminal.md'),
+            confirmed_findings=str(folder/'findings.txt')),ensure_ascii=False)+'\n'
+    instructions='\n\n<ceh_exam_workflow>\n'+rules+storage+'\n</ceh_exam_workflow>'
     if result and result[0].get('role')=='system':
         result[0]['content']=result[0]['content'].split('\n\n<ceh_exam_workflow>')[0]+instructions
     else:result.insert(0,dict(role='system',content=instructions))
@@ -131,6 +137,7 @@ def main():
     for name,value in profile_chat_paths(path.parent,profile).items():os.environ[name]=value
     from exam_workflow import Workflow,find_reference
     workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip)
+    os.environ['CEH_EXAM_DIR']=str(workflow.folder)
     workflow.start_transcript()
     task_status(workflow,profile,False,'pending')
     workflow.begin_task(profile,' '.join(sys.argv[1:]) if not extra.tool_help else '--tool-help '+extra.tool_help)
@@ -226,7 +233,7 @@ def main():
         user_evidence='\n'.join(str(m.get('content','')) for m in messages if m.get('role')=='user')
         task['prompt']=next((str(m.get('content','')) for m in reversed(messages) if m.get('role')=='user'),'')
         if '--repl' in remaining:workflow.emit('[USER] '+task['prompt'])
-        prepared=request_messages(messages,rules,workflow.context())
+        prepared=request_messages(messages,rules,workflow.context(),results_folder=workflow.folder)
         actions=dict(init_machine=lambda:workflow.initialize(),find_ceh_tools=workflow.find_tools,find_ceh_reference=find_reference,
                      set_tools_path=lambda path:workflow.set_tools_path(path,user_text=user_evidence),
                      write_lab_script=lambda name,language,content:json.dumps(scripts.write(name,language,content),ensure_ascii=False),

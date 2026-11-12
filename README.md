@@ -84,6 +84,10 @@ Desktop location). Confirmed flags and how they were found go to `findings.txt`.
 Old evidence is preserved. Inspection commands follow the existing approval guard;
 installation, deletion, writes, scripts and unknown commands require approval.
 
+All saved final results—including tool lists, reports and scan exports—belong
+in this exam folder. Tools folders remain input locations. sgpt receives the
+exact destination and must verify saved files and report their paths.
+
 ### Switch models without reinstalling
 
 ```bash
@@ -170,6 +174,10 @@ addresses, routes/DNS, cached neighbors and available tools, followed by one
 bounded model review. It does not scan other machines. New evidence goes to
 `Desktop\CEH-Exam\<IP>\terminal.md` and `findings.txt` under this account's actual
 Desktop. Existing evidence and the command-approval guard are retained.
+
+All saved final results—including tool lists, reports and scan exports—belong
+in this exam folder. Tools folders remain input locations. sgpt receives the
+exact destination and must verify saved files and report their paths.
 
 Run **`sgpt`** alone to open normal chat and continue typing at its prompt.
 There is no separate tools-path input dialog. A path is optional: for example,

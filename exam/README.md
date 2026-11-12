@@ -309,7 +309,19 @@ Desktop/CEH-Exam/10.10.10.13/
 
 That IP is an example, not a configured address. The default folder uses the
 local IPv4 selected by the routing table. On multihomed machines, select the
-intended filing IP explicitly. For observations about another machine:
+intended filing IP explicitly.
+
+All final result files belong inside this exam folder: tool lists, reports,
+scan exports, extracted results, hashes, decoded data and captures. A tools
+directory or share is an input location. Every model request includes the exact
+session output paths; child commands can also use `$env:CEH_EXAM_DIR` in
+PowerShell or `"$CEH_EXAM_DIR"` in Bash. sgpt must verify each saved file and
+report its path. Existing evidence is preserved. Final chat text already goes
+to `terminal.md`, so a separate duplicate summary file is not needed for every
+reply. This is a workflow rule, not a filesystem sandbox; review output paths
+when approving commands or scripts.
+
+For observations about another machine:
 
 ```text
 sgpt --target-ip 10.10.10.9 "Summarize the observations I provide about this machine"

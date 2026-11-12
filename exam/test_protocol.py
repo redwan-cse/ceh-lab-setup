@@ -76,6 +76,22 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(second[-3:],messages[-3:])
         self.assertEqual(sum(m['content'].count('Current rules') for m in second),1)
 
+    def test_results_destination_is_always_in_system_rules_not_chat_history(self):
+        import json
+        from pathlib import Path
+        folder=Path('exam evidence')/'10.10.10.22'
+        messages=[{'role':'system','content':'Base role'},{'role':'user','content':'List tools'}]
+        original=[dict(message) for message in messages]
+        first=request_messages(messages,'Save final results in the exam folder.','',results_folder=folder)
+        second=request_messages(first,'Save final results in the exam folder.','New facts',results_folder=folder)
+        for request in (first,second):
+            system=request[0]['content']
+            self.assertIn(json.dumps(str(folder)),system)
+            self.assertIn(json.dumps(str(folder/'terminal.md')),system)
+            self.assertIn(json.dumps(str(folder/'findings.txt')),system)
+            self.assertEqual(system.count('exam_results_folder'),1)
+        self.assertEqual(messages,original)
+
     def test_real_tool_history_survives_without_transient_context(self):
         history=[{'role':'system','content':'Base role'},{'role':'user','content':'pwd'}]
         prepared=request_messages(history,'Approval rules','Transient observation')
