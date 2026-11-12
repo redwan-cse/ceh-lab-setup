@@ -184,7 +184,7 @@ def write_wrappers(profile=None,activate=False,local_lab=False):
 
 RUNTIME_RESOURCES=('exam_runtime.py','exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py',
                    'Switch-Model.ps1','switch-model.sh','Launch-Sgpt.ps1','launch-sgpt.sh','preflight.py',
-                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh')
+                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh','bootstrap-python-linux.sh')
 
 
 def copy_runtime_resources(resources):
@@ -213,7 +213,7 @@ def prepare_venv():
     if ROOT.is_symlink() or private.is_symlink() or getattr(private,'is_junction',lambda:False)():raise RuntimeError('Redirected installation refused')
     healthy=False
     if python.exists():
-        try:healthy=subprocess.run([str(python),'-c','import sys'],capture_output=True).returncode==0
+        try:healthy=subprocess.run([str(python),'-c','import sys; assert sys.version_info >= (3,10); import ssl'],capture_output=True).returncode==0
         except OSError:pass
     if not healthy:
         if private.exists():
