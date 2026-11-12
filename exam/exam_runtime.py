@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from terminal_ui import ApprovalRefusal,ApprovalDeclined
 
 
 class ProviderBlocked(RuntimeError):pass
@@ -17,6 +18,10 @@ def configure_stdio():
 
 def local_init_request(arguments):
     return '--init-lab' in arguments or ' '.join(arguments).strip().lower() in ('init the machine','initialize the machine','init machine','initialize machine')
+
+
+def conversation_arguments(arguments,interactive):
+    return ['--repl','lab'] if not arguments and interactive else arguments
 
 
 def profile_chat_paths(config,profile):
@@ -84,21 +89,26 @@ def complete(client, messages, model, tools, execute, limit=8, show_outputs=True
                 raise ProviderIncomplete('Malformed tool arguments; no commands in this response were executed. Task is incomplete; no automatic retry was made.') from None
             validated.append((call,name,arguments))
         record(message)  # Retain provider-specific metadata only after validation.
-        for call,name,arguments in validated:
+        for position,(call,name,arguments) in enumerate(validated):
             if name=='execute_shell_command':
                 if set(arguments)!={'shell_command'} or not isinstance(arguments['shell_command'],str):raise RuntimeError('Invalid tool arguments')
                 result=execute(arguments['shell_command'])
             elif actions and name in actions:
                 try:result=actions[name](**arguments)
-                except (TypeError,ValueError) as exc:result='Workflow action refused: '+str(exc)
+                except (TypeError,ValueError,OSError) as exc:result='Workflow action refused: '+str(exc)
             else:raise RuntimeError('Unknown tool refused')
-            if show_outputs and (name!='execute_shell_command' or show_command_outputs):yield '\n```text\n'+result+'\n```\n'
+            if show_outputs and (name not in ('execute_shell_command','run_lab_script') or show_command_outputs):yield '\n```text\n'+result+'\n```\n'
             record(dict(role='tool',tool_call_id=call['id'],content=result))
+            if isinstance(result,ApprovalRefusal):
+                for pending,_,_ in validated[position+1:]:
+                    record(dict(role='tool',tool_call_id=pending['id'],content='Not executed: an earlier approval was declined.'))
+                raise ApprovalDeclined('Approval was not given. Stopped this task without further actions or API requests; you can continue chatting.')
     raise ProviderIncomplete('Tool continuation limit reached; task is incomplete. Inspect saved evidence before continuing. No further commands were run.')
 
 
 def main():
     configure_stdio()
+    interactive_session=sys.stdin.isatty()
     import argparse
     from providers import PROFILES,select_profile,ProviderCalls,review_task
     from setup_exam import load_keys
@@ -106,6 +116,7 @@ def main():
     options.add_argument('--profile',choices=PROFILES)
     options.add_argument('--target-ip')
     options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
+    options.add_argument('--tools-path',help='Optional file/folder to use for this account; never required')
     options.add_argument('--model-info',action='store_true',help='Show configured model/endpoint locally, without an API call')
     extra,remaining=options.parse_known_args(sys.argv[1:])
     sys.argv=[sys.argv[0],*remaining]
@@ -123,6 +134,13 @@ def main():
     workflow.start_transcript()
     task_status(workflow,profile,False,'pending')
     workflow.begin_task(profile,' '.join(sys.argv[1:]) if not extra.tool_help else '--tool-help '+extra.tool_help)
+    if extra.tools_path:
+        try:print(workflow.set_tools_path(extra.tools_path,explicit=True))
+        except (ValueError,OSError) as exc:
+            print('Optional tools path not set: '+str(exc)+'. Continuing with installed tools.')
+            extra.tools_path=None
+        if not remaining:
+            task_status(workflow,profile,True,'local-settings');return
     if extra.model_info:
         print('Active provider: '+profile+'\nModel: '+values['DEFAULT_MODEL']+'\nEndpoint: '+values['API_BASE_URL']+'\nReasoning effort: provider default (no native ShellGPT effort option)')
         task_status(workflow,profile,True,'local-info');return
@@ -135,7 +153,7 @@ def main():
         parser.add_argument('--discover',action='store_true');parser.add_argument('--tools-path')
         parser.add_argument('--local-only',action='store_true',help='Collect without the one-call Gemini review')
         args=parser.parse_args(sys.argv[1:] if '--init-lab' in sys.argv else ['--init-lab'])
-        print(workflow.initialize(args.scope,args.discover,args.tools_path))
+        print(workflow.initialize(args.scope,args.discover,args.tools_path or extra.tools_path))
         if args.local_only:
             task_status(workflow,profile,True,'skipped')
             print('Local-only initialization: no model/API request was made.');return
@@ -152,12 +170,27 @@ def main():
     if not values.get('OPENAI_API_KEY'):
         if any(x in sys.argv for x in ('--version','--help')):os.environ['OPENAI_API_KEY']='offline-version-check'
         else:raise RuntimeError('Save your provider key using setup_exam.py --key-only')
+    remaining=conversation_arguments(remaining,interactive_session)
+    sys.argv=[sys.argv[0],*remaining]
     import sgpt.handlers.handler as handler
+    from lab_scripts import LabScripts
+    from terminal_ui import install_terminal_printer,interactive_input
+    read_approval=lambda prompt:interactive_input(prompt,interactive=interactive_session)
+    scripts=LabScripts(workflow,input_reader=read_approval)
+    install_terminal_printer(handler.Handler)
     from sgpt.config import cfg
     if os.name=='nt':from sgpt import shellgpt_command_guard as guard
     else:from sgpt import linux_command_guard as guard
+    guard.input=read_approval
     original_execute=guard.execute_command
-    def execute_command(command):return workflow.execute(command,original_execute)
+    def execute_command(command):
+        def run(value):
+            result=original_execute(value)
+            if result.startswith('Command not executed: approval was not given.'):
+                if not interactive_session:result+=' No interactive input is available. Run sgpt in a terminal (use ssh -tt for SSH) to type an approval; no command was executed.'
+                return ApprovalRefusal(result)
+            return result
+        return workflow.execute(command,run)
     guard.execute_command=execute_command  # Also covers --shell's run_command.
     handler.client.api_key=values.get('OPENAI_API_KEY','offline-version-check')
     handler.client.base_url=values['API_BASE_URL']
@@ -176,6 +209,10 @@ def main():
     def run_with_review(command):
         workflow.recent_evidence=[]
         result=execute_command(command)
+        if isinstance(result,ApprovalRefusal):
+            task['completed']=False
+            task_status(workflow,profile,False,'approval-declined',task['answer'])
+            return result
         if task['completed'] and values.get('REVIEW_MODEL'):print(audit())
         elif task['completed']:task_status(workflow,profile,True,'not-required',task['answer'])
         return result
@@ -191,21 +228,31 @@ def main():
         if '--repl' in remaining:workflow.emit('[USER] '+task['prompt'])
         prepared=request_messages(messages,rules,workflow.context())
         actions=dict(init_machine=lambda:workflow.initialize(),find_ceh_tools=workflow.find_tools,find_ceh_reference=find_reference,
+                     set_tools_path=lambda path:workflow.set_tools_path(path,user_text=user_evidence),
+                     write_lab_script=lambda name,language,content:json.dumps(scripts.write(name,language,content),ensure_ascii=False),
+                     run_lab_script=scripts.run,
                      save_finding=lambda flag,how_found:workflow.finding(flag,how_found,user_evidence))
         if functions:
             functions=list(functions)
             for name,description,properties in (
                 ('init_machine','Collect this machine network settings and cached neighbors. No active discovery.',{}),
-                ('find_ceh_tools','Find verified tool paths in the user-configured CEH tools index.',{'query':{'type':'string'}}),
+                ('find_ceh_tools','Find installed PATH commands, relevant Desktop files/wordlists and optional custom paths. No tools folder is required. Metadata only; never executes files.',{'query':{'type':'string'}}),
+                ('set_tools_path','Remember an OPTIONAL file/folder path explicitly supplied by the user in chat. Never ask for a global tools path to start normal work.',{'path':{'type':'string'}}),
+                ('write_lab_script','Only when required or requested: create/edit a numbered script copy in the exam folder. Prefer direct commands for ordinary tasks. Never executes code.',{'name':{'type':'string','description':'Stable base name without extension or version number; reuse the same base for edits.'},'language':{'type':'string','enum':['python','shell','powershell','batch','cmd']},'content':{'type':'string'}}),
+                ('run_lab_script','Run an owned script filename directly; this tool verifies its index/hash, so do not search configuration folders first. New versions require visible approval. Never bypass a declined approval.',{'script':{'type':'string'}}),
                 ('find_ceh_reference','Search concise tool syntax and workflows. Guidance only; verify installed tools and paths before execution.',{'query':{'type':'string'}}),
                 ('save_finding','Save only a confirmed flag and how it was found, using command or user evidence.',{'flag':{'type':'string'},'how_found':{'type':'string'}})):
                 schema={'name':name,'description':description}
                 if properties:schema['parameters']={'type':'object','properties':properties,'required':list(properties)}
                 functions.append({'type':'function','function':schema})
         model=model if any(arg in ('--model','-m') or arg.startswith('--model=') for arg in remaining) else values['DEFAULT_MODEL']
-        for chunk in complete(calls,prepared,model,functions,execute_command,show_outputs=cfg.get('SHOW_FUNCTIONS_OUTPUT')=='true',actions=actions,history=messages,show_command_outputs=False):
-            task['answer']=(task['answer']+chunk)[-1500:]
-            yield chunk
+        try:
+            for chunk in complete(calls,prepared,model,functions,execute_command,show_outputs=cfg.get('SHOW_FUNCTIONS_OUTPUT')=='true',actions=actions,history=messages,show_command_outputs=False):
+                task['answer']=(task['answer']+chunk)[-1500:]
+                yield chunk
+        except ApprovalDeclined as exc:
+            task_status(workflow,profile,False,'approval-declined',task['answer'])
+            yield '\n'+str(exc)+'\n';return
         task['completed']=True
         if values.get('REVIEW_MODEL'):
             if '--shell' not in remaining and '-s' not in remaining:yield audit()

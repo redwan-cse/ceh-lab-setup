@@ -39,6 +39,14 @@ Python 3.10+, the private pinned ShellGPT environment, Bash and `iproute2`.
 Missing prerequisites require one installation consent; sudo may separately
 request your password. Declining or noninteractive input installs nothing.
 No CEH tool bundle, OS upgrade/removal, SSH or network changes are performed.
+If the lab has Python 3.8 or no usable venv support, setup downloads a
+checksum-verified private Python 3.12 instead of requesting obsolete Python
+packages from APT. The system Python and repository configuration stay unchanged.
+
+If ShellGPT is already installed, run this same setup. It installs/repairs our
+private copy and activates `sgpt`; an existing per-user launcher is backed up,
+including pipx links. Keys, findings and exam evidence are retained on reruns.
+Open a new terminal after setup so the updated command takes precedence.
 
 Active settings/key: `~/.config/shell_gpt_exam/.sgptrc`.
 Saved provider keys: `~/.config/shell_gpt_exam/provider-keys.json`.
@@ -46,7 +54,7 @@ These are protected local plaintext files, excluded from Git. To replace the
 active key later:
 
 ```bash
-python3 ./exam/setup_exam.py --key-only
+"$HOME/.local/share/shellgpt-exam/venv/bin/python" ./exam/setup_exam.py --key-only
 ```
 
 ### Check, initialize and work
@@ -58,6 +66,13 @@ sgpt "init the machine"
 sgpt --tool-help "nmap"
 sgpt --repl work "Help me inspect this machine"
 ```
+
+For a normal conversation, run **`sgpt`** without a prompt. Type your task at
+the chat prompt and continue replying there; Ctrl+C stops the chat. The
+one-shot commands above remain available. A tools path is never a prerequisite:
+Parrot uses installed commands first and checks the current folder, relevant Desktop folders or
+standard wordlists when needed. If you want a custom folder, say in chat:
+`Use ~/Desktop/MyWordlists when this task needs a wordlist` (use a real path).
 
 `--model-info` reads the actual configuration without an API call. Initialization
 runs the native Bash collector for host identity, addresses, routes/DNS, cached
@@ -92,6 +107,14 @@ python3 ./exam/uninstall_exam.py
 
 This removes the dedicated exam environment, keys and private state, while
 retaining Desktop evidence and Python itself. [Full exam guide](exam/README.md).
+On an older cloud image whose system Python is below 3.10, use the cached
+bootstrap interpreter for removal instead:
+
+```bash
+task_python="$(bash ./exam/bootstrap-python-linux.sh --find)"
+"$task_python" ./exam/uninstall_exam.py --dry-run
+"$task_python" ./exam/uninstall_exam.py
+```
 
 ## Exam: Windows
 
@@ -111,6 +134,11 @@ prerequisites require one installation consent; OS authentication may ask
 separately. Existing usable Python is preferred. If needed, signed Python is
 installed under `%LOCALAPPDATA%\CEHLab\shellgpt-python`, without adding Python
 to PATH or installing a global launcher.
+
+An existing ShellGPT installation is supported: run this same setup to
+install/repair the private copy and activate `sgpt`. Any launcher replaced in
+our per-user command location is backed up; existing keys and exam evidence
+are retained. Open a new terminal after setup.
 
 Active settings/key: `%USERPROFILE%\.config\shell_gpt_exam\.sgptrc`.
 Saved provider keys: `%USERPROFILE%\.config\shell_gpt_exam\provider-keys.json`.
@@ -142,6 +170,11 @@ addresses, routes/DNS, cached neighbors and available tools, followed by one
 bounded model review. It does not scan other machines. New evidence goes to
 `Desktop\CEH-Exam\<IP>\terminal.md` and `findings.txt` under this account's actual
 Desktop. Existing evidence and the command-approval guard are retained.
+
+Run **`sgpt`** alone to open normal chat and continue typing at its prompt.
+There is no separate tools-path input dialog. A path is optional: for example,
+type `Use C:\Users\Administrator\Desktop\Tools for this task` in chat, replacing
+it with the actual path. A specific executable or wordlist file is accepted too.
 
 ### Switch models without reinstalling
 
@@ -296,6 +329,7 @@ They are not part of the exam installer. Review their effects before use.
 All maintained guides are kept in this repository and published together:
 
 - [Full exam setup, scope, evidence, reasoning and recovery guide](exam/README.md)
+- [Normal chat, optional tools paths and versioned scripts](exam/README.md#normal-chat-optional-paths-and-scripts)
 - [ShellGPT task rules](exam/LAB-RULES.md)
 - [CEH tool commands and workflows](docs/ceh-tools/README.md)
 - [Local tool inventory summary](docs/ceh-tools/inventory.md), [Parrot inventory](docs/ceh-tools/inventory-linux.md), [Windows inventory](docs/ceh-tools/inventory-windows.md)

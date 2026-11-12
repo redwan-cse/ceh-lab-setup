@@ -26,6 +26,9 @@ retained on reruns. Missing Python/venv or `iproute2` prerequisites require one
 consent; sudo authentication can ask separately. Apt simulation rejects
 upgrades/removals, and no apt update/upgrade is run. Python packages stay in
 the dedicated environment; a healthy environment is not force-reinstalled.
+Old Python (including 3.8) or missing `ensurepip` uses a private Python 3.12
+download through a pinned, checksum-verified uv bootstrap. This avoids stale
+Python/venv APT packages without changing the distribution's Python or repositories.
 
 After opening a new terminal:
 
@@ -35,7 +38,8 @@ sgpt "init the machine"
 sgpt --tool-help "nmap"
 ```
 
-If indexing CEH files, replace the path with the actual provided tools folder:
+Optional only: if you want to index a custom folder, replace the path below.
+Normal Parrot tools and Desktop wordlists do not require this step:
 
 ```bash
 sgpt --init-lab --tools-path /PATH/TO/CEH_TOOLS
@@ -52,12 +56,21 @@ To enter/replace the active key later, preview/reset generated logs, or remove
 this account's exam installation:
 
 ```bash
-python3 ./exam/setup_exam.py --key-only
-python3 ./exam/reset_exam_logs.py
+"$HOME/.local/share/shellgpt-exam/venv/bin/python" ./exam/setup_exam.py --key-only
+"$HOME/.local/share/shellgpt-exam/venv/bin/python" ./exam/reset_exam_logs.py
 # Only if you intend to clear the previewed generated logs:
-python3 ./exam/reset_exam_logs.py --clear
+"$HOME/.local/share/shellgpt-exam/venv/bin/python" ./exam/reset_exam_logs.py --clear
 python3 ./exam/uninstall_exam.py --dry-run
 python3 ./exam/uninstall_exam.py
+```
+
+Use system Python for removal only if it is 3.10+. If setup had to bootstrap
+Python for an old cloud image, select that cached interpreter (no download):
+
+```bash
+task_python="$(bash ./exam/bootstrap-python-linux.sh --find)"
+"$task_python" ./exam/uninstall_exam.py --dry-run
+"$task_python" ./exam/uninstall_exam.py
 ```
 
 ## Windows exam setup
@@ -84,7 +97,8 @@ sgpt "init the machine"
 sgpt --tool-help "nmap"
 ```
 
-To index CEH files, replace the example with the actual provided tools folder:
+Optional only: to index CEH files, replace the example with the actual provided
+tools folder. A folder is not required to initialize or start a task:
 
 ```powershell
 sgpt --init-lab --tools-path 'C:\PATH\TO\CEH_TOOLS'
@@ -188,6 +202,78 @@ not scan neighbors or infer their OS/online status. Missing tools, API quota,
 Internet access or permissions can stop work; failures are reported and
 collected evidence is retained.
 
+The working scope is the machines/resources assigned to your CEH lab session.
+You do not need to repeat an authorization statement or provide a tools root
+for each task. If a network operation needs an unknown target/range, provide
+the assigned IP/CIDR in chat. This does not authorize unrelated Internet assets.
+
+## Normal chat, optional paths and scripts
+
+Start an interactive conversation with `sgpt` alone, or use the native
+`sgpt --repl work` to choose a chat name. Type the task and follow-up messages
+at that prompt; Ctrl+C stops it. `sgpt "task"` remains a one-shot request.
+
+The normal workflow is direct commands: run a command, inspect actual output,
+then choose the next command. Scripts are created only when required or
+requested. A GUI-only task gets a manual procedure when terminal execution
+cannot perform it.
+
+A custom tools path is optional on both platforms. Parrot lookup prefers
+installed PATH commands, then bounded Desktop folders and relevant standard
+wordlist locations. Files in the current working folder are checked too.
+Desktop names vary; no CEH share is assumed or required.
+On Windows, you can provide a CEH tool folder, script, executable or wordlist
+when a particular task needs it. Type it as an ordinary chat message:
+
+```text
+Use ~/Desktop/MyWordlists only when this task needs a wordlist.
+Use C:\Users\Administrator\Desktop\Tools for this task.
+```
+
+Use the example matching your OS and replace it with a real path. There is no
+separate path dialog. `set_tools_path` remembers an explicitly supplied path;
+it never executes files. The optional CLI form is `sgpt --tools-path "PATH"`.
+Missing paths are nonfatal; sgpt continues with available tools and asks only
+for a particular missing file if the task cannot otherwise proceed.
+
+`sgpt "task"` uses the command/output/action loop; `--shell` and `--chat` are
+optional stock modes, not prerequisites for execution. For example:
+
+```text
+sgpt "Calculate SHA256 for the file sample.txt in the current folder"
+```
+
+### Existing ShellGPT installations
+
+Run the same OS setup script after `git pull --ff-only` to install or repair
+this private ShellGPT copy. Reinstallation is supported; reruns retain the
+active provider, saved keys, Desktop evidence and findings. A launcher in this
+setup's per-user command location is moved to a unique `sgpt.before-exam-*`
+(Windows: `sgpt.cmd.before-exam-*`) backup before replacement. A pipx symlink
+is moved as a link, leaving its package unchanged. The selected backup is
+recorded privately in `cli-backup.json` and restored on uninstall. Other
+system installations and unrelated aliases are preserved.
+
+Open a new terminal and run `sgpt --model-info` to verify the active endpoint
+and model. A shell alias/function named `sgpt` can take precedence over PATH;
+check `type -a sgpt` on Parrot or `Get-Command sgpt -All` on Windows if the old
+command still runs. Remove only your conflicting alias/function, then reopen
+the terminal. Stop an existing sgpt chat before updating its runtime.
+
+When a script is needed, its source and numbered versions stay under
+`Desktop/CEH-Exam/<IP>/scripts/`, for example `scripts_check_1.py`,
+`scripts_check_2.py`, or `.sh`, `.ps1`, `.bat`/`.cmd` according to the installed
+runtime and OS. Edits create a new version. Each new version requires visible
+approval; an unchanged approved version can rerun within that chat process.
+Approvals are not retained across processes. Results are logged, and sgpt
+inspects them before deciding what to do next. This is not an OS sandbox.
+
+Output is printed without live redraw so approval prompts remain visible.
+Type `yes` at the approval prompt to approve the displayed version/command.
+Declining stops that task's remaining actions and API calls, while the chat
+remains available. Piped/closed input cannot approve commands; for remote
+interactive use, connect with `ssh -tt`.
+
 Skip the paid review explicitly:
 
 ```text
@@ -269,7 +355,8 @@ During a task, `find_ceh_reference` retrieves bounded excerpts;
 or proves runtime readiness. Prefer existing, OS-compatible tools and ask
 before installing or making critical configuration changes.
 
-Index actual tool files using the path example in your OS section above.
+Custom indexing is optional. `find_ceh_tools` also resolves PATH commands and
+performs bounded Desktop/wordlist lookup without any catalog.
 
 For GUI tasks, sgpt locates an indexed tool or asks where it is, supplies manual
 steps and requests your observations. It cannot see GUI results automatically.
@@ -290,3 +377,11 @@ quota and billing. `OTHER` means an unspecified provider reason. Preserve the
 timestamp, configured model/endpoint and harmless reproduction for support;
 exclude the key. Do not disguise a request or disable safety settings. Remote
 availability and exam readiness cannot be guaranteed by setup alone.
+
+For old Parrot APT `404 Not Found` errors requesting `python3.8-venv`, pull the
+updated kit and rerun `bash ./exam/setup-exam.sh`. The installer checks the
+Python version before selecting dependencies and uses the private Python
+fallback; it does not try to repair EOL distribution repositories. GitHub
+release downloads and PyPI must be reachable. [Astral's Python management
+documentation](https://docs.astral.sh/uv/guides/install-python/) describes the
+managed Python distributions used by this fallback.

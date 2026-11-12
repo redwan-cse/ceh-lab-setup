@@ -9,6 +9,28 @@ class Message:
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_refused_script_stops_batch_and_provider_calls(self):
+        from terminal_ui import ApprovalRefusal,ApprovalDeclined
+        value={'role':'assistant','tool_calls':[
+            {'id':'one','function':{'name':'run_lab_script','arguments':'{"script":"scripts_test_1.py"}'}},
+            {'id':'two','function':{'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}}]}
+        requests=[]
+        def create(**kwargs):
+            requests.append(kwargs)
+            return SimpleNamespace(choices=[SimpleNamespace(message=Message(value))])
+        client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        messages=[]
+        with self.assertRaises(ApprovalDeclined):
+            list(complete(client,messages,'model',[{}],lambda command:self.fail('ran after refusal'),actions={'run_lab_script':lambda script:ApprovalRefusal('Execution declined')}))
+        self.assertEqual(len(requests),1)
+        self.assertEqual([m['tool_call_id'] for m in messages if m['role']=='tool'],['one','two'])
+
+    def test_bare_sgpt_opens_chat_but_piped_input_stays_one_shot(self):
+        from exam_runtime import conversation_arguments
+        self.assertEqual(conversation_arguments([],True),['--repl','lab'])
+        self.assertEqual(conversation_arguments([],False),[])
+        self.assertEqual(conversation_arguments(['hello'],True),['hello'])
+
     def test_malformed_tool_batch_executes_nothing(self):
         value={'role':'assistant','tool_calls':[
             {'id':'ok','function':{'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}},

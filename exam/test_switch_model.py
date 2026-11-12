@@ -94,14 +94,13 @@ class SwitchModelTests(unittest.TestCase):
             setup_exam.write_wrappers('stepfun')
         self.assertEqual([p.name for p in bindir.iterdir()],['sgpt'+suffix])
 
-    def test_unrelated_wrapper_is_never_overwritten_or_removed(self):
+    def test_unrelated_legacy_aliases_are_never_overwritten_or_removed(self):
         bindir=self.wrapper_dir();bindir.mkdir(parents=True)
         suffix='.cmd' if os.name=='nt' else ''
-        for name in ('sgpt','sgpt-exam','sgpt-lab'):
+        for name in ('sgpt-exam','sgpt-lab'):
             target=bindir/(name+suffix);target.write_text('unrelated program')
             with patch.object(setup_exam.Path,'home',return_value=self.home):
-                with self.assertRaisesRegex(RuntimeError,'wrapper'):
-                    setup_exam.write_wrappers('stepfun',True)
+                setup_exam.write_wrappers('stepfun',True)
             self.assertEqual(target.read_text(),'unrelated program')
             target.unlink()
 

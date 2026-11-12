@@ -11,6 +11,7 @@ import venv
 import json
 import tempfile
 import uuid
+import re
 from providers import PROFILES, GOOGLE_BASE, STEP_BASE, select_profile
 
 
@@ -159,32 +160,96 @@ def copy_references(resources):
         if path.resolve()!=destination.resolve():shutil.copyfile(path,destination)
 
 
+def redirected_cli(path):
+    return path.is_symlink() or getattr(path,'is_junction',lambda:False)()
+
+
+def owned_wrapper(path,runtime):
+    if redirected_cli(path) or not path.is_file():return False
+    try:return str(runtime) in path.read_text(encoding='utf-8')
+    except (UnicodeError,OSError):return False
+
+
+def validate_cli_backup(backup,target,kind=None):
+    # Resolve the parent only: a pipx backup is itself a link to another install.
+    if (not backup.is_absolute() or backup.parent!=target.absolute().parent
+            or backup.parent.resolve()!=target.parent.resolve()
+            or not re.fullmatch(re.escape(target.name)+r'\.before-exam(?:-[A-Za-z0-9_-]+)?',backup.name)):
+        raise RuntimeError('CLI backup outside the expected command directory refused')
+    actual='symlink' if backup.is_symlink() else 'file'
+    if getattr(backup,'is_junction',lambda:False)() or (actual=='file' and not backup.is_file()):
+        raise RuntimeError('Missing or invalid CLI backup: '+str(backup))
+    if kind is not None and kind!=actual:raise RuntimeError('CLI backup kind changed; inspect manually')
+    return backup
+
+
+def load_cli_backup(bin_dir,target):
+    manifest=ROOT/'cli-backup.json'
+    if redirected_cli(ROOT) or redirected_cli(bin_dir) or redirected_cli(manifest):
+        raise RuntimeError('Redirected CLI backup metadata refused')
+    if not manifest.exists():return None
+    try:
+        record=json.loads(manifest.read_text(encoding='utf-8'))
+        if (record.get('version')!=1 or record.get('ownedPath')!=str(target.absolute())
+                or record.get('kind') not in ('file','symlink')):
+            raise ValueError('Unexpected CLI backup record')
+        backup=Path(record['backupPath'])
+    except (ValueError,TypeError,KeyError,AttributeError) as error:
+        raise RuntimeError('Invalid CLI backup metadata; inspect manually') from error
+    return validate_cli_backup(backup,target,record['kind'])
+
+
 def write_wrappers(profile=None,activate=False,local_lab=False):
     runtime=ROOT/'exam_runtime.py'
     bin_dir=ROOT/'bin' if os.name=='nt' else Path.home()/'.local'/'bin'
-    if bin_dir.is_symlink():raise RuntimeError('Redirected CLI directory refused')
+    if redirected_cli(ROOT) or redirected_cli(bin_dir):raise RuntimeError('Redirected CLI directory refused')
     bin_dir.mkdir(parents=True,exist_ok=True)
-    targets={}
-    for name in ('sgpt','sgpt-exam','sgpt-lab'):
-        target=bin_dir/(name+'.cmd' if os.name=='nt' else name)
-        if target.is_symlink():raise RuntimeError('Refusing a redirected CLI wrapper')
-        if target.exists() and str(runtime) not in target.read_text(encoding='utf-8'):
-            raise RuntimeError('Unmanaged CLI wrapper refused: '+name)
-        targets[name]=target
+    suffix='.cmd' if os.name=='nt' else ''
+    target=bin_dir/('sgpt'+suffix)
+    previous=load_cli_backup(bin_dir,target)
+    moved=None
+    if (target.exists() or target.is_symlink()) and not owned_wrapper(target,runtime):
+        if previous is not None:raise RuntimeError('CLI wrapper changed while an original backup is pending; inspect manually')
+        if getattr(target,'is_junction',lambda:False)() or (not target.is_symlink() and not target.is_file()):
+            raise RuntimeError('Unsupported CLI wrapper; inspect manually: '+str(target))
+        kind='symlink' if target.is_symlink() else 'file'
+        # mkstemp reserves a unique name without replacing any older backup.
+        descriptor,name=tempfile.mkstemp(prefix=target.name+'.before-exam-',dir=bin_dir)
+        os.close(descriptor)
+        moved=Path(name)
+        try:os.replace(target,moved)
+        except BaseException:
+            moved.unlink()
+            raise
     if os.name=='nt':
         wrapper=f'@echo off\nrem Owned exam runtime: {runtime}\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "{ROOT / "Launch-Sgpt.ps1"}" %*\n'
     else:
         import shlex
         wrapper=f'#!/bin/sh\n# Owned exam runtime: {runtime}\nexec {shlex.quote(str(ROOT / "launch-sgpt.sh"))} "$@"\n'
-    targets['sgpt'].write_text(wrapper,encoding='utf-8',newline='\n');os.chmod(targets['sgpt'],0o700)
+    try:
+        if moved is not None:
+            atomic_private_write(ROOT/'cli-backup.json',json.dumps(dict(version=1,
+                ownedPath=str(target.absolute()),backupPath=str(moved.absolute()),kind=kind)))
+        atomic_private_write(target,wrapper)
+        os.chmod(target,0o700)
+    except BaseException:
+        if moved is not None:
+            # A failed restore leaves the backup and metadata in place for recovery.
+            try:os.replace(moved,target)
+            except OSError as error:
+                raise RuntimeError('Setup failed; original CLI preserved at '+str(moved)) from error
+            manifest=ROOT/'cli-backup.json'
+            if manifest.exists():manifest.unlink()
+        raise
     for name in ('sgpt-exam','sgpt-lab'):
-        if targets[name].exists():targets[name].unlink()
+        alias=bin_dir/(name+suffix)
+        if owned_wrapper(alias,runtime):alias.unlink()
     return bin_dir
 
 
 RUNTIME_RESOURCES=('exam_runtime.py','exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py',
                    'Switch-Model.ps1','switch-model.sh','Launch-Sgpt.ps1','launch-sgpt.sh','preflight.py',
-                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh','bootstrap-python-linux.sh')
+                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh','bootstrap-python-linux.sh','terminal_ui.py','lab_scripts.py')
 
 
 def copy_runtime_resources(resources):
@@ -289,7 +354,7 @@ def main():
         copy_runtime_resources(resources)
         write_wrappers(settings['EXAM_PROFILE'],args.activate,args.local_lab)
         if not args.no_key_prompt:key_prompt(settings)
-        print('Selected exam profile: '+settings['EXAM_PROFILE']);return
+        print('Active provider: '+settings['EXAM_PROFILE']);return
     package=Path(sysconfig.get_path('purelib'))/'sgpt'
     patch(package/'config.py','Path(CONFIG_FOLDER) / "shell_gpt"','Path(CONFIG_FOLDER) / "shell_gpt_exam"')
     platform='windows' if os.name=='nt' else 'linux'
