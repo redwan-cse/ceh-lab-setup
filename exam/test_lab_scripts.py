@@ -36,6 +36,13 @@ class ScriptWorkflow:
 
 
 class LabScriptsTests(unittest.TestCase):
+    def test_ai_review_can_approve_owned_readonly_script_without_human_prompt(self):
+        from unittest.mock import Mock
+        self.scripts.approval_reviewer=Mock(return_value=True)
+        self.scripts.input_reader=Mock(side_effect=AssertionError('Human prompt not expected'))
+        value=self.scripts.write('ai_readonly','python','print("SYNTHETIC_AI_SCRIPT_OK")')
+        self.assertIn('SYNTHETIC_AI_SCRIPT_OK',self.scripts.run(value['script']))
+        self.scripts.approval_reviewer.assert_called_once()
     def test_language_change_keeps_the_version_series(self):
         first=self.scripts.write('language_change','python','print(1)')
         second=self.scripts.write('language_change_2','powershell','Write-Output 2')

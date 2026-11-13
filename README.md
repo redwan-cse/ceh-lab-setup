@@ -86,15 +86,16 @@ not scan other machines. See [scope and evidence rules](exam/README.md#initializ
 
 New commands/output go to `~/Desktop/CEH-Exam/<IP>/terminal.md` (or the configured
 Desktop location). Confirmed flags and how they were found go to `findings.txt`.
-Old evidence is preserved. Recognized read-only workflows, text pipelines and
-new downloads/reports inside the exam folder run automatically. Installation,
-deletion, system changes, scripts and unknown commands still require approval.
+Old evidence is preserved. Recognized routine forms run immediately; other
+commands and owned scripts receive automatic approval review from the same
+active model. Routine work does not need you to type yes. Installation, deletion,
+critical changes or uncertain decisions still require human approval.
 
 All saved final results—including tool lists, reports and scan exports—belong
 in this exam folder. Tools folders remain input locations. sgpt receives the
 exact destination and must verify saved files and report their paths.
 
-Long tasks get 40 model/API rounds, then an interactive **continue? [y/N]**
+Long tasks get 40 main-agent rounds, then an interactive **continue? [y/N]**
 prompt. `yes` continues with the existing results. Use `--tool-rounds 60` to
 choose a larger block; [continuation details](exam/README.md#longer-tasks-and-continuation).
 
@@ -203,7 +204,11 @@ All saved final results—including tool lists, reports and scan exports—belon
 in this exam folder. Tools folders remain input locations. sgpt receives the
 exact destination and must verify saved files and report their paths.
 
-Long tasks get 40 model/API rounds, then an interactive **continue? [y/N]**
+Routine commands outside the literal fast path are reviewed automatically by
+the same model, including generated script source. Protected or uncertain
+operations still require human approval. [Approval details](exam/README.md#ai-approve-for-me).
+
+Long tasks get 40 main-agent rounds, then an interactive **continue? [y/N]**
 prompt. `yes` continues with the existing results. Use `--tool-rounds 60` to
 choose a larger block; [continuation details](exam/README.md#longer-tasks-and-continuation).
 

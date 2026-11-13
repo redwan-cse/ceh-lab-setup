@@ -12,7 +12,10 @@ import subprocess
 import time
 import uuid
 import sys
+import hashlib
+import tempfile
 from terminal_ui import ApprovalRefusal
+from file_locking import file_lock
 
 
 def plain_text(text):
@@ -146,9 +149,12 @@ class Workflow:
 
     def append(self,path,text):
         if redirected(path):raise RuntimeError('Redirected evidence file refused')
-        with path.open('ab') as stream:
-            start=stream.tell();stream.write(self.redact(text).encode('utf-8'));stream.flush()
-            return start,stream.tell()
+        lock=self.state/('append-'+hashlib.sha256(str(path.absolute()).encode()).hexdigest()[:20]+'.lock')
+        with file_lock(lock):
+            with path.open('ab') as stream:
+                stream.seek(0,2);start=stream.tell();data=self.redact(text).encode('utf-8')
+                stream.write(data);stream.flush()
+                return start,start+len(data)
 
     def emit(self,text):
         text=plain_text(self.redact(text))
@@ -168,7 +174,19 @@ class Workflow:
     def write(self,name,text):
         path=self.state/name
         if redirected(path):raise RuntimeError('Redirected report file refused')
-        path.write_text(self.redact(text),encoding='utf-8');os.chmod(path,0o600)
+        descriptor,temporary=tempfile.mkstemp(prefix='.'+path.name+'-',dir=self.state)
+        temporary=Path(temporary)
+        try:
+            with os.fdopen(descriptor,'w',encoding='utf-8',newline='\n') as stream:
+                stream.write(self.redact(text));stream.flush();os.fsync(stream.fileno())
+            for attempt in range(3):
+                try:os.replace(temporary,path);break
+                except PermissionError:
+                    if attempt==2:raise
+                    time.sleep(0.01)
+            os.chmod(path,0o600)
+        finally:
+            if temporary.exists():temporary.unlink()
 
     def execute(self,command,runner):
         identifier=uuid.uuid4().hex[:12]

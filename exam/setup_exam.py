@@ -275,7 +275,7 @@ def write_wrappers(profile=None,activate=False,local_lab=False):
 
 RUNTIME_RESOURCES=('exam_runtime.py','exam_workflow.py','LAB-RULES.md','setup_exam.py','providers.py',
                    'Switch-Model.ps1','switch-model.sh','Launch-Sgpt.ps1','launch-sgpt.sh','preflight.py',
-                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh','bootstrap-python-linux.sh','terminal_ui.py','lab_scripts.py','Activate-Sgpt.ps1','routine_commands.py')
+                   'collect-host-windows.ps1','collect-host-parrot.sh','Setup-Exam.ps1','setup-exam.sh','bootstrap-python-linux.sh','terminal_ui.py','lab_scripts.py','Activate-Sgpt.ps1','routine_commands.py','ai_approval.py','file_locking.py')
 
 
 def copy_runtime_resources(resources):
@@ -399,7 +399,7 @@ def main():
     function='''from pydantic import BaseModel, Field
 from sgpt.GUARD import execute_command
 class Function(BaseModel):
-    """Execute a task command. Recognized routine work runs automatically; installation, deletion, system changes and unknown code need approval. Respect refusals."""
+    """Execute the task command. Routine operations run automatically or receive same-model AI approval review. Protected or uncertain operations require human approval. Do not pre-ask the user; respect actual refusals."""
     shell_command: str = Field(..., description="Command to execute")
     @classmethod
     def execute(cls, shell_command): return execute_command(shell_command)

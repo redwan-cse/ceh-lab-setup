@@ -273,16 +273,18 @@ the terminal. Stop an existing sgpt chat before updating its runtime.
 When a script is needed, its source and numbered versions stay under
 `Desktop/CEH-Exam/<IP>/scripts/`, for example `scripts_check_1.py`,
 `scripts_check_2.py`, or `.sh`, `.ps1`, `.bat`/`.cmd` according to the installed
-runtime and OS. Edits create a new version. Each new version requires visible
-approval; an unchanged approved version can rerun within that chat process.
+runtime and OS. Edits create a new version. Each new version receives approval
+review; clear routine code can be AI-approved, protected or uncertain code
+needs a human decision. An unchanged approved version can rerun in that process.
 Approvals are not retained across processes. Results are logged, and sgpt
 inspects them before deciding what to do next. This is not an OS sandbox.
 
 Output is printed without live redraw so approval prompts remain visible.
 Type `yes` at the approval prompt to approve the displayed version/command.
 Declining stops that task's remaining actions and API calls, while the chat
-remains available. Piped/closed input cannot approve commands; for remote
-interactive use, connect with `ssh -tt`.
+remains available. Piped/closed input cannot provide HUMAN approval; automatic
+routine approvals can still run without a terminal. For remote human approval,
+connect with `ssh -tt`.
 
 Skip the paid review explicitly:
 
@@ -313,16 +315,52 @@ Downloads ignore curl configuration files and unsupported upload/code options.
 New output files must stay inside the exam folder; existing evidence is not
 automatically overwritten. A supported append can add to an ordinary report.
 The main terminal/findings journals remain managed by the workflow tools.
-Scripts, dynamic expressions, unknown commands, deletion, installation, sudo
-and system changes still require approval of the exact command/version.
-Refusal, missing input or policy failure prevents
+Other command forms and owned scripts now use the AI reviewer described below.
+Deletion, installation, sudo, system changes and uncertain decisions require
+human approval of the exact command/version. Refusal, unavailable required
+human input or policy failure prevents
 execution. This guard is an approval aid, not an OS sandbox. Each request has
 a 90-second timeout and no automatic retries. Empty responses produce an
 incomplete-task message.
 
+### AI approve for me
+
+The default is layered approval: known literal routine forms run immediately;
+otherwise the **same active model and endpoint** review the exact command.
+For a generated/edited script, the reviewer also sees its owned, hash-verified
+source before execution. Clear routine work is approved without typing `yes`.
+This covers compound `find`, `file`, Nmap/report commands and redirections such
+as `2>/dev/null` or `2>&1`, even when the literal planner does not support them.
+The existing shell/interpreter executes the reviewed operation normally.
+
+The reviewer receives command text, owned script source, task context and paths;
+it does not read existing task files. Decisions and API usage are logged. It
+uses the current model/key, with no second provider or batch inference. These
+are additional billable calls; the forty-round limit counts main-agent rounds.
+Successful decisions are cached for the same command/source/task in that process.
+Output paths are checked locally on every approval, including cached decisions.
+
+Installation, deletion, privilege escalation and critical changes stay under
+human control. Uncertain/invalid/provider-failed reviews defer to the existing
+human prompt. A provider refusal never triggers another provider or a retry.
+Only a human can supply that remaining approval; closed input cannot do so.
+Declining still stops the task. Each terminal keeps its own approvals and can
+run independently. Prefer distinct result filenames for parallel tasks.
+Short local locks protect shared transcript offsets and the owned-script index;
+state JSON is replaced atomically so concurrent terminals do not read partial data.
+
+AI review is an approval aid, not an OS sandbox: approved commands/scripts run
+with the account's permissions. To disable AI approval for one invocation while
+retaining the literal routine fast path:
+
+```text
+sgpt --manual-approval "Your task"
+```
+
 ### Longer tasks and continuation
 
-The default budget is **40 model/API rounds per task**, rather than eight.
+The default budget is **40 main-agent rounds per task**, rather than eight;
+AI approval checks are additional calls.
 One round can contain several tool calls. At the budget boundary an interactive
 session asks:
 

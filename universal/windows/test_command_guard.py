@@ -70,6 +70,11 @@ class PolicyTests(unittest.TestCase):
         with patch.object(guard, 'classify', side_effect=RuntimeError('classifier failed')):
             self.assertIn('not executed', guard.execute_command('Get-Date'))
 
+    def test_ai_approval_runs_readonly_expression_without_human_prompt(self):
+        command="$value='SYNTHETIC_AI_APPROVED'; Write-Output $value"
+        with patch('builtins.input',side_effect=AssertionError('Unexpected human prompt')):
+            self.assertIn('SYNTHETIC_AI_APPROVED',guard.execute_command(command,auto_approve=lambda value:value==command))
+
     def test_routine_download_and_report_outputs_stay_in_exam_folder(self):
         with tempfile.TemporaryDirectory() as folder,patch.dict(os.environ,{'CEH_EXAM_DIR':folder}):
             path=str(Path(folder)/'report.txt')

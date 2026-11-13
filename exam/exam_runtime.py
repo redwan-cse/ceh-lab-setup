@@ -144,6 +144,7 @@ def main():
     options.add_argument('--target-ip')
     options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
     options.add_argument('--tools-path',help='Optional file/folder to use for this account; never required')
+    options.add_argument('--manual-approval',action='store_true',help='Disable the AI approval reviewer for this invocation')
     options.add_argument('--tool-rounds',type=tool_rounds,default=DEFAULT_TOOL_ROUNDS,help='Model/API rounds before offering continuation (1-100; default 40)')
     options.add_argument('--model-info',action='store_true',help='Show configured model/endpoint locally, without an API call')
     extra,remaining=options.parse_known_args(sys.argv[1:])
@@ -221,7 +222,11 @@ def main():
             if plan:
                 print('[sgpt] Automatically running recognized routine workflow:\n'+value,flush=True)
                 result=run_linux(plan,guard.run_pipeline)
-            else:result=original_execute(value)
+            else:
+                import inspect
+                if not extra.manual_approval and 'auto_approve' in inspect.signature(original_execute).parameters:
+                    result=original_execute(value,auto_approve=approval_reviewer.approve)
+                else:result=original_execute(value)
             if result.startswith('Command not executed: approval was not given.'):
                 if not interactive_session:result+=' No interactive input is available. Run sgpt in a terminal (use ssh -tt for SSH) to type an approval; no command was executed.'
                 return ApprovalRefusal(result)
@@ -233,6 +238,10 @@ def main():
     handler.client.max_retries=0;handler.client.timeout=90
     calls=ProviderCalls(values,workflow.emit,handler.client)
     task={'completed':False,'answer':'','reviewed':False,'prompt':''}
+    from ai_approval import ApprovalReviewer
+    approval_reviewer=ApprovalReviewer(calls,values['DEFAULT_MODEL'],workflow.folder,workflow.emit,workflow.redact,lambda:task['prompt'])
+    if not extra.manual_approval:
+        scripts.approval_reviewer=lambda command,path:approval_reviewer.approve(command,script_source=path.read_text(encoding='utf-8'),cwd=path.parent)
     def audit():
         task['reviewed']=True
         try:
@@ -275,7 +284,7 @@ def main():
                 ('find_ceh_tools','Find installed PATH commands, relevant Desktop files/wordlists and optional custom paths. No tools folder is required. Metadata only; never executes files.',{'query':{'type':'string'}}),
                 ('set_tools_path','Remember an OPTIONAL file/folder path explicitly supplied by the user in chat. Never ask for a global tools path to start normal work.',{'path':{'type':'string'}}),
                 ('write_lab_script','Only when required or requested: create/edit a numbered script copy in the exam folder. Prefer direct commands for ordinary tasks. Never executes code.',{'name':{'type':'string','description':'Stable base name without extension or version number; reuse the same base for edits.'},'language':{'type':'string','enum':['python','shell','powershell','batch','cmd']},'content':{'type':'string'}}),
-                ('run_lab_script','Run an owned script filename directly; this tool verifies its index/hash, so do not search configuration folders first. New versions require visible approval. Never bypass a declined approval.',{'script':{'type':'string'}}),
+                ('run_lab_script','Run an owned script filename directly; verifies index/hash and reviews its source for AI approval. Protected or uncertain operations need human approval. Never bypass a declined approval.',{'script':{'type':'string'}}),
                 ('find_ceh_reference','Search concise tool syntax and workflows. Guidance only; verify installed tools and paths before execution.',{'query':{'type':'string'}}),
                 ('save_finding','Save only a confirmed flag and how it was found, using command or user evidence.',{'flag':{'type':'string'},'how_found':{'type':'string'}})):
                 schema={'name':name,'description':description}

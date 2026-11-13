@@ -31,7 +31,7 @@ def classify(command):
     return decision
 
 
-def execute_command(command):
+def execute_command(command,auto_approve=None):
     try:
         decision = classify(command)
     except Exception:
@@ -40,6 +40,8 @@ def execute_command(command):
         # Import qualified cmdlets only from system modules in a fresh session.
         code = '$env:PSModulePath = Join-Path $PSHOME "Modules"; ' + decision['command']
         print('[sgpt] Automatically running recognized inspection command:\n' + command, flush=True)
+    elif auto_approve is not None and auto_approve(command):
+        code='$env:PSModulePath = Join-Path $PSHOME "Modules"; '+command
     else:
         # Escape control characters so an unknown command cannot hide itself
         # using terminal cursor/erase sequences in the approval display.

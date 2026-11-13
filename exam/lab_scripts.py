@@ -1,8 +1,8 @@
 """Versioned, reviewed lab scripts. Approved scripts use the current user's permissions.
 
 This is an execution approval boundary, not an operating-system sandbox. Creating
-or editing writes a new version only; each version needs a visible ``yes`` in
-the current chat process. No approval is persisted across processes.
+or editing writes a new version only; each version receives AI or human approval
+in the current chat process. No approval is persisted across processes.
 No interpreters are installed. Windows PowerShell uses a child-process execution
 policy flag; no persistent execution-policy or Group Policy changes are made.
 """
@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 from terminal_ui import ApprovalRefusal,interactive_input
+from file_locking import file_lock
 
 
 _TIMEOUT_SECONDS = 120
@@ -48,12 +49,13 @@ def _safe_path(path):
 
 
 class LabScripts:
-    def __init__(self, workflow, input_reader=None):
+    def __init__(self, workflow, input_reader=None,approval_reviewer=None):
         self.workflow = workflow
         self.folder = Path(workflow.folder).absolute() / 'scripts'
         self.index = Path(workflow.state).absolute() / 'scripts-index.json'
         self._approved_versions=set()
         self.input_reader=input_reader or interactive_input
+        self.approval_reviewer=approval_reviewer
 
     def _records(self):
         _safe_path(self.folder)
@@ -67,6 +69,13 @@ class LabScripts:
 
     def write(self, name, language, content):
         """Create the next exclusive version, record its digest, and display its source."""
+        _safe_path(self.index)
+        with file_lock(self.index.with_suffix('.lock')):
+            metadata=self._write(name,language,content)
+        self.workflow.emit('Saved new script version: '+metadata['path']+'\nSHA256: '+metadata['sha256']+'\nSOURCE:\n'+content)
+        return metadata
+
+    def _write(self,name,language,content):
         if not isinstance(language, str) or language.lower() not in _LANGUAGES:
             raise ValueError('Use Python, Bash/shell, PowerShell, or Windows batch/cmd')
         language, extension = _LANGUAGES[language.lower()]
@@ -110,7 +119,6 @@ class LabScripts:
         records[path.name] = metadata
         _safe_path(self.index)
         self.workflow.write(self.index.name, json.dumps(records, ensure_ascii=False, indent=2))
-        self.workflow.emit('Saved new script version: ' + str(path) + '\nSHA256: ' + metadata['sha256'] + '\nSOURCE:\n' + content)
         return metadata
 
     def _owned(self, script):
@@ -193,14 +201,18 @@ class LabScripts:
             process.kill()
 
     def run(self, script):
-        """Run an unchanged owned version after explicit approval in this chat."""
+        """Run an unchanged owned version after approval review in this process."""
         path, record = self._owned(script)
         argv = self._command(path, record.get('language'))
         command = subprocess.list2cmdline(argv)
 
         def runner(_command):
             approval=(path.name,record['sha256'])
-            if approval not in self._approved_versions:
+            ai_approved=False
+            if approval not in self._approved_versions and self.approval_reviewer:
+                try:ai_approved=self.approval_reviewer(command,path)
+                except Exception:ai_approved=False
+            if approval not in self._approved_versions and not ai_approved:
                 try:
                     answer = self.input_reader('Approve this version ' + path.name + ' (SHA256 ' + record['sha256'] + ') for this chat with your full current user permissions? Review its source and installation/deletion actions. Type yes to run: ')
                 except (EOFError,OSError,KeyboardInterrupt):

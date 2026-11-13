@@ -54,6 +54,37 @@ class LinuxGuardTests(unittest.TestCase):
         self.assertIn('approved-test', result)
         self.assertIn('Exit code: 0', result)
 
+    def test_ai_approval_handles_screenshot_readonly_chains_without_prompt(self):
+        import shlex
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);(path/'fixture.txt').write_text('SYNTHETIC_DATA\n')
+            commands=[
+                'ls -la '+shlex.quote(directory)+' 2>/dev/null; echo HOME; ls -la '+shlex.quote(directory)+' 2>/dev/null',
+                'find '+shlex.quote(directory)+" -maxdepth 2 -type f -printf '%y %p\\n' 2>/dev/null | head -50",
+                'grep -rIl SYNTHETIC '+shlex.quote(directory)+' 2>/dev/null | head -20; file '+shlex.quote(str(path/'fixture.txt'))+'; head -c 600 '+shlex.quote(str(path/'fixture.txt')),
+            ]
+            with patch('builtins.input',side_effect=AssertionError('Human prompt is not expected')):
+                for command in commands:
+                    approved=[]
+                    result=guard.execute_command(command,auto_approve=lambda value:approved.append(value) or True)
+                    self.assertIn('Exit code: 0',result)
+                    self.assertEqual(approved,[command])
+
+    def test_ai_deferral_still_needs_human_approval(self):
+        with patch('builtins.input',return_value='no'):
+            self.assertIn('not executed',guard.execute_command('unknown_command',auto_approve=lambda _:False))
+
+    def test_ai_approved_shell_does_not_source_hidden_startup_code(self):
+        import shlex
+        with tempfile.TemporaryDirectory() as directory:
+            marker=Path(directory)/'unexpected'
+            startup=Path(directory)/'startup.sh'
+            startup.write_text('touch '+shlex.quote(str(marker)))
+            with patch.dict(os.environ,{'BASH_ENV':str(startup)}),patch('builtins.input',side_effect=AssertionError('Unexpected prompt')):
+                result=guard.execute_command("printf SYNTHETIC_ENV_OK",auto_approve=lambda _:True)
+            self.assertIn('SYNTHETIC_ENV_OK',result)
+            self.assertFalse(marker.exists())
+
     def test_timeout_kills_background_child_after_shell_exits(self):
         import shlex
         with tempfile.TemporaryDirectory() as directory:

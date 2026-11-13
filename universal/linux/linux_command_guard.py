@@ -81,7 +81,7 @@ def classify(command):
     return {'automatic': True, 'reason': 'Recognized literal inspection command', 'argv': pipeline}
 
 
-def run_pipeline(pipeline,cwd=None,stdout_path=None,append=False):
+def run_pipeline(pipeline,cwd=None,stdout_path=None,append=False,env=None):
     processes = []
     cleanup_groups = False
     deadline = time.monotonic() + 300
@@ -97,7 +97,7 @@ def run_pipeline(pipeline,cwd=None,stdout_path=None,append=False):
                 error_file = stack.enter_context(tempfile.TemporaryFile())
                 error_files.append(error_file)
                 process = subprocess.Popen(argv, stdin=previous or subprocess.DEVNULL,
-                                           stdout=output_file if output_file and index==len(pipeline)-1 else subprocess.PIPE, stderr=error_file,cwd=cwd,
+                                           stdout=output_file if output_file and index==len(pipeline)-1 else subprocess.PIPE, stderr=error_file,cwd=cwd,env=env,
                                            start_new_session=True)
                 if previous is not None:
                     previous.close()
@@ -136,7 +136,7 @@ def run_pipeline(pipeline,cwd=None,stdout_path=None,append=False):
                     process.stdout.close()
 
 
-def execute_command(command):
+def execute_command(command,auto_approve=None):
     try:
         decision = classify(command)
     except Exception:
@@ -144,6 +144,9 @@ def execute_command(command):
     if decision['automatic']:
         print('[sgpt] Automatically running recognized inspection command:\n' + command, flush=True)
         return run_pipeline(decision['argv'])
+    if auto_approve is not None and auto_approve(command):
+        environment={key:value for key,value in os.environ.items() if key not in ('BASH_ENV','ENV','SHELLOPTS','BASHOPTS') and not key.startswith('BASH_FUNC_')}
+        return run_pipeline([['/bin/bash','--noprofile','--norc','-c',command]],env=environment)
     print('[sgpt] Approval required: ' + decision['reason'] + '\n' + json.dumps(command), flush=True)
     try:
         approved = input('Execute this exact command? Type yes to approve: ').strip().lower() == 'yes'

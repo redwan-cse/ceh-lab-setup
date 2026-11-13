@@ -67,5 +67,9 @@ The existing Server 2022 terminal log contained 54 normal-model requests with
 reported costs: about 3,708 input and 246 output tokens per request on average,
 totalling **$0.00814**. This is a short-workload sample, not a completed six-hour
 20-flag benchmark, so the planning scenarios above allow much larger contexts.
-The new approval/40-round validation uses offline fixtures; it does not submit
-batch inference requests.
+Validation uses offline fixtures and small normal-model live checks with
+synthetic data; it does not submit batch inference requests. The AI approval
+reviewer adds calls to the same active model for operations outside the literal
+fast path. The 40-round budget counts main-agent rounds; include approval calls
+when counting total billable requests. Prioritize reliable completion; this
+guide is a planning aid rather than a restriction on API use.
