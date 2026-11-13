@@ -129,6 +129,65 @@ class RuntimeAuditTests(unittest.TestCase):
 
     def test_each_shell_repl_execution_gets_one_carbon_review(self):self.run_repl_reviews(True)
 
+    def test_real_repl_opens_replies_and_resumes_after_tool_only_message(self):
+        from providers import OPENROUTER_BASE
+        code=r'''
+import io,json,os,sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+source=Path(sys.argv[1]);home=Path(sys.argv[2]);resuming=sys.argv[3]=='resume'
+sys.path.insert(0,str(source));calls=[]
+class Terminal(io.StringIO):
+    def isatty(self):return True
+def create(self,**kwargs):
+    calls.append(kwargs)
+    text=str(kwargs['messages'])
+    if resuming:
+        assert 'SAVED_REPLY_FIRST' in text and 'SAVED_REPLY_SECOND' in text
+        assert 'thought_signature' in text and 'OFFLINE_TOOL_RESULT' in text
+        value={'role':'assistant','content':'RESTORED_REPLY'}
+    elif len(calls)==1:
+        value={'role':'assistant','tool_calls':[{'id':'repl-tool','type':'function','function':{'name':'execute_shell_command','arguments':'{"shell_command":"offline_repl_fixture"}'},'extra_content':{'google':{'thought_signature':'offline-signature'}}}]}
+    else:value={'role':'assistant','content':'SAVED_REPLY_FIRST' if len(calls)==2 else 'SAVED_REPLY_SECOND'}
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(model_dump=lambda **_:value),finish_reason='stop')])
+with patch('pathlib.Path.home',return_value=home),patch('getpass.getpass',side_effect=AssertionError('Unexpected key prompt')),patch('socket.socket.connect',side_effect=AssertionError('Unexpected network request')),patch('openai.resources.chat.completions.Completions.create',create):
+    import exam_runtime,exam_workflow
+    import importlib
+    guard=importlib.import_module('sgpt.shellgpt_command_guard' if os.name=='nt' else 'sgpt.linux_command_guard')
+    with patch.object(exam_workflow,'desktop',return_value=home/'Desktop'),patch.object(exam_workflow,'local_ip',return_value='127.0.0.1'),patch.object(guard,'execute_command',lambda command:'Exit code: 0\nOFFLINE_TOOL_RESULT'),patch('sys.stdin',Terminal('')),patch('typer.prompt',side_effect=['resume turn','exit()'] if resuming else ['first turn','second turn','exit()']):
+        sys.argv=['sgpt','--challenge','5','--repl','challenge5']
+        exam_runtime.main()
+    assert len(calls)==(1 if resuming else 3)
+'''
+        # Use the genuine REPL/ChatSession/CLI; only input, API and command runner
+        # are fixtures. In particular, do not replace the sgpt app entry point.
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory);config=home/'.config/shell_gpt_exam';config.mkdir(parents=True)
+            settings=dict(OPENAI_API_KEY='offline-router',API_BASE_URL=OPENROUTER_BASE,EXAM_PROFILE='openrouter-deepseek',ROLE_STORAGE_PATH=str(config/'roles'),CHAT_CACHE_PATH=str(config/'chats'),CACHE_PATH=str(config/'cache'))
+            (config/'.sgptrc').write_text(''.join(f'{k}={v}\n' for k,v in settings.items()))
+            (config/'provider-keys.json').write_text(json.dumps(dict(openrouter='offline-router')))
+            functions=config/'functions';functions.mkdir()
+            (functions/'fixture.py').write_text('''from pydantic import BaseModel
+class Function(BaseModel):
+    shell_command: str
+    @classmethod
+    def execute(cls, shell_command):return "Fixture must use the runtime command wrapper"
+    @classmethod
+    def openai_schema(cls):return {"type":"function","function":{"name":"execute_shell_command","parameters":{"type":"object","properties":{"shell_command":{"type":"string"}},"required":["shell_command"]}}}
+''')
+            # The runner mock imports sgpt before main sets profile paths.
+            environment=dict(os.environ,HOME=str(home),USERPROFILE=str(home),CHAT_CACHE_PATH=str(config/'chats/openrouter-deepseek'))
+            for phase in ('fresh','resume'):
+                result=subprocess.run([sys.executable,'-c',code,str(Path(__file__).parent),str(home),phase],env=environment,input='',capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertIn('Entering REPL mode',result.stdout)
+                if phase=='resume':self.assertIn('RESTORED_REPLY',result.stdout)
+            saved=json.loads((config/'chats/openrouter-deepseek/challenge5').read_text())
+            self.assertTrue(any('tool_calls' in message and 'content' not in message for message in saved))
+            self.assertIn('RESTORED_REPLY',str(saved))
+            self.assertEqual(len(list((home/'Desktop/CEH-Exam/127.0.0.1/sessions').iterdir())),2)
+
     def test_same_chat_name_is_isolated_between_profiles(self):
         from providers import STEP_BASE
         code=r'''

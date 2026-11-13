@@ -8,6 +8,38 @@ from terminal_ui import TerminalPrinter, install_terminal_printer
 
 
 class TerminalUITests(unittest.TestCase):
+    def test_local_key_error_does_not_blame_credentials_or_print_its_value(self):
+        from exam_runtime import failure_heading
+        text=failure_heading(KeyError('sensitive-value'))
+        self.assertIn('failed locally: KeyError',text)
+        self.assertNotIn('sensitive-value',text)
+        self.assertNotIn('billing',text)
+        self.assertNotIn('endpoint',text)
+
+    def test_history_renderer_handles_tool_only_and_null_content_without_mutation(self):
+        import copy
+        from terminal_ui import install_chat_history_renderer
+        messages=[{'role':'system','content':'You are ShellGPT'},
+                  {'role':'user','content':'Inspect this machine'},
+                  {'role':'assistant','tool_calls':[{'id':'call1','function':{'name':'execute_shell_command','arguments':'{"shell_command":"pwd"}'}}],
+                   'reasoning_details':[{'type':'reasoning.encrypted','data':'private-metadata'}]},
+                  {'role':'tool','tool_call_id':'call1','content':'ACTUAL_RESULT'},
+                  {'role':'assistant','content':None,'tool_calls':[{'id':'call2','function':{'name':'init_machine','arguments':'{}'}}]},
+                  {'role':'assistant','content':'Done'}]
+        original=copy.deepcopy(messages)
+        class Session:
+            def _read(self,chat_id):return messages
+            def get_messages(self,chat_id):
+                return [f"{message['role']}: {message['content']}" for message in self._read(chat_id)]
+        install_chat_history_renderer(Session)
+        rendered=Session().get_messages('challenge5')
+        self.assertEqual(rendered[0],'system: You are ShellGPT')
+        self.assertIn('execute_shell_command',rendered[2])
+        self.assertIn('ACTUAL_RESULT',rendered[3])
+        self.assertIn('init_machine',rendered[4])
+        self.assertNotIn('private-metadata','\n'.join(rendered))
+        self.assertEqual(messages,original)
+
     def test_reopened_console_cannot_override_noninteractive_entry(self):
         from terminal_ui import interactive_input
         with patch('terminal_ui.sys.stdin.isatty',return_value=True),patch('builtins.input',side_effect=AssertionError('Reopened console would hang')):

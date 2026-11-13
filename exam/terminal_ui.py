@@ -43,3 +43,26 @@ class TerminalPrinter:
 def install_terminal_printer(handler_class):
     """Replace only the exam process's ShellGPT renderer, leaving guards intact."""
     handler_class.printer = property(lambda self: TerminalPrinter())
+
+
+def install_chat_history_renderer(session_class):
+    """Render saved tool-only messages without changing API history on disk.
+
+    ShellGPT 1.5.1 indexes every message's content while validating/displaying
+    a saved chat. Assistant tool calls may legitimately omit content or use
+    null. Keep that metadata intact for requests; format only the display copy.
+    """
+    def get_messages(self,chat_id):
+        rendered=[]
+        for message in self._read(chat_id):
+            role=message['role']
+            content=message.get('content')
+            if content is None:
+                names=[]
+                for call in message.get('tool_calls') or []:
+                    name=call.get('function',{}).get('name','unknown')
+                    names.append(str(name))
+                content='[Tool calls: '+', '.join(names)+']' if names else '[No text]'
+            rendered.append(f'{role}: {content}')
+        return rendered
+    session_class.get_messages=get_messages

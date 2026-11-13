@@ -13,6 +13,12 @@ class ToolLimitReached(ProviderIncomplete):pass
 DEFAULT_TOOL_ROUNDS=40
 
 
+def failure_heading(exc):
+    if isinstance(exc,(KeyError,AttributeError,TypeError,NameError)):
+        return f'Exam ShellGPT failed locally: {type(exc).__name__}. Saved chats and evidence were preserved. Rerun the current OS setup script to repair the exam runtime.'
+    return f'Exam ShellGPT failed: {type(exc).__name__}; HTTP {getattr(exc,"status_code","n/a")}. Check endpoint, model, key and billing.'
+
+
 def tool_rounds(value):
     count=int(value)
     if not 1<=count<=100:raise ValueError('Tool rounds must be between 1 and 100')
@@ -210,10 +216,12 @@ def main():
     sys.argv=[sys.argv[0],*remaining]
     import sgpt.handlers.handler as handler
     from lab_scripts import LabScripts
-    from terminal_ui import install_terminal_printer,interactive_input
+    from terminal_ui import install_terminal_printer,install_chat_history_renderer,interactive_input
     read_approval=lambda prompt:interactive_input(prompt,interactive=interactive_session)
     scripts=LabScripts(workflow,input_reader=read_approval)
     install_terminal_printer(handler.Handler)
+    from sgpt.handlers.chat_handler import ChatSession
+    install_chat_history_renderer(ChatSession)
     from sgpt.config import cfg
     if os.name=='nt':from sgpt import shellgpt_command_guard as guard
     else:from sgpt import linux_command_guard as guard
@@ -327,8 +335,8 @@ if __name__=='__main__':
         if isinstance(exc,(ProviderBlocked,ProviderIncomplete)):
             print(str(exc),file=sys.stderr);sys.exit(2)
         # Provider error bodies can echo submitted data. Never print them/keys.
-        print(f'Exam ShellGPT failed: {type(exc).__name__}; HTTP {getattr(exc,"status_code","n/a")}. Check endpoint, model, key and billing.',file=sys.stderr)
-        if isinstance(exc,(AttributeError,TypeError,NameError)):
+        print(failure_heading(exc),file=sys.stderr)
+        if isinstance(exc,(KeyError,AttributeError,TypeError,NameError)):
             import traceback
             frames=traceback.extract_tb(exc.__traceback__)
             for frame in frames[-4:]:print(f'Local diagnostic: {Path(frame.filename).name}:{frame.lineno} ({frame.name})',file=sys.stderr)

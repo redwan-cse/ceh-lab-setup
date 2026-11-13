@@ -553,6 +553,19 @@ for setup, then rerun the complete OS installer from the updated repository.
 Capture its output if it stops. Keys remain per-user; do not expose them in
 diagnostic screenshots.
 
+### Saved chat fails with KeyError
+
+Older exam runtimes can fail when reopening `--repl` or `--chat` after tool
+use. ShellGPT 1.5.1's history display expects text in every saved message, but
+an assistant tool-call message may validly omit `content`. The current runtime
+renders these as tool-call summaries without changing the saved API history or
+its tool metadata. This local startup error does not establish a bad API key.
+
+Pull the latest repository, rerun the OS setup, open a new terminal and use the
+same named chat again. Do not delete the saved conversation or evidence to fix
+this issue. See the [command reference](SGPT-COMMANDS.md#switch-models-and-update-the-setup)
+for the update steps.
+
 ### Reset, removal and provider troubleshooting
 
 Use the reset/removal commands grouped under your OS above. Reset previews
