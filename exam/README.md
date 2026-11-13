@@ -1,5 +1,8 @@
 # Exam ShellGPT: one command, one active model
 
+For day-to-day usage, see the [sgpt command reference](SGPT-COMMANDS.md), covering
+standard options, custom exam commands, parallel sessions and model switching.
+
 Use **`sgpt`** on Windows or Parrot. Fresh exam installations default to
 OpenRouter `deepseek/deepseek-v4.1-flash-1017`; StepFun `step-5-preview` is a
 manual alternative for local practice. Switching changes one active

@@ -11,6 +11,7 @@ for public research. See the [exam scope guide](exam/README.md#initialize-and-in
 
 - [Exam: Parrot](#exam-parrot)
 - [Exam: Windows](#exam-windows)
+- [sgpt command reference and examples](exam/SGPT-COMMANDS.md)
 - [Exam: Android target](#exam-android-target)
 - [Normal local lab](#normal-local-lab)
 - [All documentation](#all-documentation)
@@ -388,6 +389,7 @@ They are not part of the exam installer. Review their effects before use.
 All maintained guides are kept in this repository and published together:
 
 - [Full exam setup, scope, evidence, reasoning and recovery guide](exam/README.md)
+- [sgpt command reference: standard options, custom options and examples](exam/SGPT-COMMANDS.md)
 - [Normal chat, optional tools paths and versioned scripts](exam/README.md#normal-chat-optional-paths-and-scripts)
 - [ShellGPT task rules](exam/LAB-RULES.md)
 - [Normal-model API budget and batch explanation](exam/API-COSTS.md)
