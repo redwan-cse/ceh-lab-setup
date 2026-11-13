@@ -216,11 +216,12 @@ def main():
     sys.argv=[sys.argv[0],*remaining]
     import sgpt.handlers.handler as handler
     from lab_scripts import LabScripts
-    from terminal_ui import install_terminal_printer,install_chat_history_renderer,interactive_input
+    from terminal_ui import install_terminal_printer,install_chat_history_renderer,install_chat_cache_guard,interactive_input
     read_approval=lambda prompt:interactive_input(prompt,interactive=interactive_session)
     scripts=LabScripts(workflow,input_reader=read_approval)
     install_terminal_printer(handler.Handler)
     from sgpt.handlers.chat_handler import ChatSession
+    install_chat_cache_guard(ChatSession)
     install_chat_history_renderer(ChatSession)
     from sgpt.config import cfg
     if os.name=='nt':from sgpt import shellgpt_command_guard as guard

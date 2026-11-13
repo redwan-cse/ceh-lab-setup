@@ -137,6 +137,12 @@ def patch(path,before,after):
     path.write_text(text,encoding='utf-8')
 
 
+def patch_show_chat_exit(path):
+    before='    if show_chat:\n        ChatHandler.show_messages(show_chat, md)\n\n    if sum('
+    after='    if show_chat:\n        ChatHandler.show_messages(show_chat, md)\n        return\n\n    if sum('
+    patch(path,before,after)
+
+
 def update_unix_paths():
     line='\n# ShellGPT exam commands\nexport PATH="$HOME/.local/bin:$PATH"\n'
     for name in ('.profile','.bashrc','.zshenv'):
@@ -423,6 +429,7 @@ class Function(BaseModel):
         text=text[:start]+replacement+text[end:]
     elif text.count(replacement)!=1:raise RuntimeError('Unexpected ShellGPT interaction source; repair stopped')
     compile(text,str(app),'exec');app.write_text(text,encoding='utf-8')
+    patch_show_chat_exit(app)
     copy_runtime_resources(resources)
     bin_dir=write_wrappers(settings['EXAM_PROFILE'],args.activate,args.local_lab)
     if os.name=='nt':

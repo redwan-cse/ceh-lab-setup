@@ -35,7 +35,7 @@ These come from ShellGPT; the exam wrapper adds its workflow and logging.
 | `sgpt --repl work` | Open an interactive conversation named `work`. |
 | `sgpt --chat work "Continue from the previous results"` | Send one request using a saved conversation. |
 | `sgpt --list-chats` | List saved conversation names for the active provider. |
-| `sgpt --show-chat work` | Display that saved conversation; it may contain sensitive lab data. |
+| `sgpt --show-chat work` | Display that saved conversation without an API request; it may contain sensitive lab data. |
 | `sgpt --shell "Show my current directory"` | Use ShellGPT's shell-command generation/execution interface. It can show its own interaction menu; prefer normal chat for multistep automatic work. |
 | `sgpt --describe-shell "Get-ChildItem"` | Explain a command rather than execute it. Use an OS-appropriate command. |
 | `sgpt --code "Write a Python function to calculate SHA256"` | Generate code text. This mode does not itself execute the generated code. |
@@ -44,6 +44,10 @@ These come from ShellGPT; the exam wrapper adds its workflow and logging.
 `--chat` keeps conversation history; `--challenge` labels evidence. They serve
 different purposes. History is separated by provider. Each new process still
 gets a new output folder, even when reusing a chat name.
+
+Long chats keep complete tool exchanges. Older turns can leave the bounded
+conversation cache; the full transcript remains saved. Give the earlier report
+path when you need sgpt to inspect details no longer in its chat context.
 
 ## Custom exam options
 

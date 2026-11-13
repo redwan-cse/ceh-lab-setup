@@ -3,6 +3,9 @@
 For day-to-day usage, see the [sgpt command reference](SGPT-COMMANDS.md), covering
 standard options, custom exam commands, parallel sessions and model switching.
 
+See the [Windows/Parrot validation results](VALIDATION.md) for the checked
+features and commands to repeat the small live smoke test.
+
 Use **`sgpt`** on Windows or Parrot. Fresh exam installations default to
 OpenRouter `deepseek/deepseek-v4.1-flash-1017`; StepFun `step-5-preview` is a
 manual alternative for local practice. Switching changes one active
@@ -445,6 +448,11 @@ sgpt --target-ip 10.10.10.9 "Summarize the observations I provide about this mac
 `--target-ip` selects a folder only; it does not connect, authorize a scan or
 redirect local commands. Initialize without it to inventory the local machine.
 Folders belong to each VM/account and are not automatically synced.
+
+Saved conversation caches retain complete user turns so a cache limit cannot
+separate a tool result from its assistant call. Older turns may be pruned; a
+single latest long turn stays intact. Full terminal transcripts are preserved
+for reference when earlier details are no longer in the model's chat context.
 
 `terminal.md` records prompts, commands, actual output, approvals, refusals,
 answers, reviews, API usage and timing. It captures sgpt activity, not other

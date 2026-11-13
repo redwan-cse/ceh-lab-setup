@@ -66,3 +66,37 @@ def install_chat_history_renderer(session_class):
             rendered.append(f'{role}: {content}')
         return rendered
     session_class.get_messages=get_messages
+
+
+def _whole_chat_turns(messages,limit=None):
+    """Keep the role plus complete user turns, never a sliced tool exchange."""
+    if not messages:return []
+    users=[index for index,message in enumerate(messages) if index and message.get('role')=='user']
+    if not users:return messages[:1]
+    start=users[0]
+    if limit is not None and len(messages)>limit:
+        threshold=max(1,len(messages)-max(2,limit)+1)
+        candidates=[index for index in users if index>=threshold]
+        # A single long current turn is kept whole even beyond the target size.
+        start=candidates[0] if candidates else users[-1]
+    return messages[:1]+messages[start:]
+
+
+def install_chat_cache_guard(session_class):
+    """Preserve complete tool history when upstream's message cache fills."""
+    if session_class.__dict__.get('_ceh_complete_turn_cache'):return
+    original_read=session_class._read;original_write=session_class._write
+    def read(self,chat_id):
+        # Old upstream truncation may already have cut off the leading user and
+        # assistant call. Normalize the request/display copy, not the disk file.
+        return _whole_chat_turns(original_read(self,chat_id))
+    def write(self,messages,chat_id):
+        target=self.length
+        retained=_whole_chat_turns(messages,max(2,int(target)))
+        # Keep upstream serialization/storage behavior, but prevent it from
+        # slicing a retained long turn for a second time.
+        self.length=max(int(target),len(retained))
+        try:return original_write(self,retained,chat_id)
+        finally:self.length=target
+    session_class._read=read;session_class._write=write
+    session_class._ceh_complete_turn_cache=True

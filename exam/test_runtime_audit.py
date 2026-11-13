@@ -136,11 +136,12 @@ import io,json,os,sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
-source=Path(sys.argv[1]);home=Path(sys.argv[2]);resuming=sys.argv[3]=='resume'
+source=Path(sys.argv[1]);home=Path(sys.argv[2]);phase=sys.argv[3];resuming=phase=='resume'
 sys.path.insert(0,str(source));calls=[]
 class Terminal(io.StringIO):
     def isatty(self):return True
 def create(self,**kwargs):
+    assert phase!='show','Displaying saved chat must not call the provider'
     calls.append(kwargs)
     text=str(kwargs['messages'])
     if resuming:
@@ -156,9 +157,9 @@ with patch('pathlib.Path.home',return_value=home),patch('getpass.getpass',side_e
     import importlib
     guard=importlib.import_module('sgpt.shellgpt_command_guard' if os.name=='nt' else 'sgpt.linux_command_guard')
     with patch.object(exam_workflow,'desktop',return_value=home/'Desktop'),patch.object(exam_workflow,'local_ip',return_value='127.0.0.1'),patch.object(guard,'execute_command',lambda command:'Exit code: 0\nOFFLINE_TOOL_RESULT'),patch('sys.stdin',Terminal('')),patch('typer.prompt',side_effect=['resume turn','exit()'] if resuming else ['first turn','second turn','exit()']):
-        sys.argv=['sgpt','--challenge','5','--repl','challenge5']
+        sys.argv=['sgpt','--show-chat','challenge5'] if phase=='show' else ['sgpt','--challenge','5','--repl','challenge5']
         exam_runtime.main()
-    assert len(calls)==(1 if resuming else 3)
+    assert len(calls)==(0 if phase=='show' else 1 if resuming else 3)
 '''
         # Use the genuine REPL/ChatSession/CLI; only input, API and command runner
         # are fixtures. In particular, do not replace the sgpt app entry point.
@@ -178,15 +179,16 @@ class Function(BaseModel):
 ''')
             # The runner mock imports sgpt before main sets profile paths.
             environment=dict(os.environ,HOME=str(home),USERPROFILE=str(home),CHAT_CACHE_PATH=str(config/'chats/openrouter-deepseek'))
-            for phase in ('fresh','resume'):
+            for phase in ('fresh','resume','show'):
                 result=subprocess.run([sys.executable,'-c',code,str(Path(__file__).parent),str(home),phase],env=environment,input='',capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
                 self.assertEqual(result.returncode,0,result.stdout+result.stderr)
-                self.assertIn('Entering REPL mode',result.stdout)
+                if phase!='show':self.assertIn('Entering REPL mode',result.stdout)
+                else:self.assertIn('OFFLINE_TOOL_RESULT',result.stdout)
                 if phase=='resume':self.assertIn('RESTORED_REPLY',result.stdout)
             saved=json.loads((config/'chats/openrouter-deepseek/challenge5').read_text())
             self.assertTrue(any('tool_calls' in message and 'content' not in message for message in saved))
             self.assertIn('RESTORED_REPLY',str(saved))
-            self.assertEqual(len(list((home/'Desktop/CEH-Exam/127.0.0.1/sessions').iterdir())),2)
+            self.assertEqual(len(list((home/'Desktop/CEH-Exam/127.0.0.1/sessions').iterdir())),3)
 
     def test_same_chat_name_is_isolated_between_profiles(self):
         from providers import STEP_BASE
