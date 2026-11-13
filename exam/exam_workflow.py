@@ -76,6 +76,17 @@ def local_ip():
 def state_root():return Path.home()/'.config/shell_gpt_exam/state'
 
 
+def challenge_label(prompt='',explicit=None):
+    """Use only an explicit label or a challenge number the user actually wrote."""
+    if explicit is not None:
+        value=str(explicit)
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,39}',value):
+            raise ValueError('Challenge label must be 1-40 letters, digits, underscores or hyphens')
+        return 'challenge-'+(str(int(value)) if value.isdigit() else value)
+    match=re.search(r'\bchallenge\s*(?:#\s*|number\s*)?(\d{1,3})\b',prompt,re.I)
+    return 'challenge-'+str(int(match[1])) if match else None
+
+
 def reference_root():
     installed=Path(__file__).parent/'references'
     return installed if installed.is_dir() else Path(__file__).parent.parent/'docs/ceh-tools'
@@ -108,20 +119,28 @@ def find_reference(query):
 
 
 class Workflow:
-    def __init__(self,folder=None,secret='',target_ip=None):
+    def __init__(self,folder=None,secret='',target_ip=None,session=False,challenge=None,verbose=False):
         identity=str(ipaddress.IPv4Address(target_ip or local_ip()))
-        self.folder=Path(folder) if folder else desktop()/'CEH-Exam'/identity
-        self.state=self.folder/'.state' if folder else state_root()/identity
+        base=Path(folder) if folder else desktop()/'CEH-Exam'/identity
+        shared=base/'.state' if folder else state_root()/identity
+        label=challenge_label(explicit=challenge) if challenge is not None else None
+        self.session_id=((label or 'session')+'_'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'_'+uuid.uuid4().hex[:8]) if session else None
+        self.folder=base/'sessions'/self.session_id if session else base
+        self.shared_state=shared
+        self.state=shared/'sessions'/self.session_id if session else shared
+        self.verbose=verbose
         self.secret=secret;self.recent_evidence=[];self.original_stream=None
-        for path in (self.folder,self.folder.parent,self.state,self.state.parent):
+        for path in (base,base.parent,shared,shared.parent,self.folder,self.folder.parent,self.state,self.state.parent):
             if redirected(path):raise RuntimeError('Redirected report directory refused')
-        self.folder.mkdir(parents=True,exist_ok=True,mode=0o700)
+        self.folder.mkdir(parents=True,exist_ok=not session,mode=0o700)
         self.state.mkdir(parents=True,exist_ok=True,mode=0o700)
         if os.name=='nt':
             from setup_exam import windows_acl
             windows_acl(self.folder,directory=True)
             windows_acl(self.state,directory=True)
-        else:os.chmod(self.folder,0o700);os.chmod(self.state,0o700)
+            windows_acl(self.shared_state,directory=True)
+        else:
+            os.chmod(self.folder,0o700);os.chmod(self.state,0o700);os.chmod(self.shared_state,0o700)
         self.log=self.folder/'terminal.md'
         self.findings=self.folder/'findings.txt'
         for path in (self.log,self.findings):
@@ -163,18 +182,28 @@ class Workflow:
         stream.write(str(text)+'\n');stream.flush()
         return span
 
+    def diagnostic(self,text):
+        """Keep API/status details in evidence; display only with --verbose."""
+        if self.verbose:return self.emit(text)
+        return self.transcript(plain_text(self.redact(text))+'\n')
+
     def transcript(self,text):
         # Indentation preserves terminal layout and quotes untrusted Markdown.
         return self.append(self.log,''.join('    '+line for line in plain_text(text).splitlines(keepends=True)))
 
     def begin_task(self,profile,prompt):
         self.append(self.log,'\n## Task · '+datetime.now(timezone.utc).isoformat()+'\n\n')
-        self.emit('[TASK] Provider: '+profile+' | Evidence folder: '+str(self.folder)+'\nsgpt '+prompt)
+        self.diagnostic('[TASK] Provider: '+profile)
+        self.emit('Evidence folder: '+str(self.folder)+'\nsgpt '+prompt)
 
     def write(self,name,text):
-        path=self.state/name
+        shared_names={'network-info.json','network-info.txt','tools-root.json','tool-index.json'}
+        destination=self.shared_state if name in shared_names else self.state
+        destination.mkdir(parents=True,exist_ok=True,mode=0o700)
+        if redirected(destination):raise RuntimeError('Redirected report directory refused')
+        path=destination/name
         if redirected(path):raise RuntimeError('Redirected report file refused')
-        descriptor,temporary=tempfile.mkstemp(prefix='.'+path.name+'-',dir=self.state)
+        descriptor,temporary=tempfile.mkstemp(prefix='.'+path.name+'-',dir=destination)
         temporary=Path(temporary)
         try:
             with os.fdopen(descriptor,'w',encoding='utf-8',newline='\n') as stream:
@@ -192,7 +221,8 @@ class Workflow:
         identifier=uuid.uuid4().hex[:12]
         record=dict(id=identifier,time=datetime.now(timezone.utc).isoformat(),command=self.redact(command))
         # Write before running; a logging failure must not silently lose evidence.
-        self.emit(f'\n[{identifier}] {record["time"]}\nCOMMAND: {self.redact(command)}')
+        self.diagnostic(f'\n[{identifier}] {record["time"]}')
+        self.emit('COMMAND: '+self.redact(command))
         try:
             raw=runner(command)
             refused=isinstance(raw,ApprovalRefusal)
@@ -226,7 +256,7 @@ class Workflow:
         how_found=' '.join(how_found.split())
         block=f'Flag: {flag.strip()}\nHow found: {how_found}\n\n'
         if block not in self.findings.read_text(encoding='utf-8'):self.append(self.findings,block)
-        return 'Saved flag and how found to findings.txt.'
+        return 'Saved flag and how found to '+str(self.findings)+'.'
 
     def index_tools(self,root):
         root=Path(root).expanduser()
@@ -270,11 +300,11 @@ class Workflow:
             candidate=shutil.which(name)
             if candidate and Path(candidate).is_file():add(candidate,'PATH command; runtime behavior not tested')
         roots=[Path.cwd(),desktop()]
-        optional=self.state/'tools-root.json'
+        optional=self.shared_state/'tools-root.json'
         if optional.exists() and not redirected(optional):
             try:roots.insert(0,Path(json.loads(optional.read_text(encoding='utf-8'))['path']))
             except (ValueError,KeyError,TypeError):pass
-        catalog=self.state/'tool-index.json'
+        catalog=self.shared_state/'tool-index.json'
         if catalog.exists() and not redirected(catalog):
             try:
                 data=json.loads(catalog.read_text(encoding='utf-8'))
@@ -373,7 +403,7 @@ class Workflow:
 
     def network_data(self):
         for name in ('network-info.json','network-info.txt'):
-            path=self.state/name
+            path=self.shared_state/name
             if path.exists():
                 text=path.read_text(encoding='utf-8')
                 if text.lstrip().startswith('{'):return json.loads(text)
@@ -389,11 +419,11 @@ class Workflow:
         text=response.choices[0].message.content
         if not text or not text.strip():raise RuntimeError('Reviewer returned no visible text')
         usage=getattr(response,'usage',None)
-        if usage:text+=f'\n\nAPI usage: {getattr(usage,"prompt_tokens","unknown")} input; {getattr(usage,"completion_tokens","unknown")} output tokens.'
+        if usage and self.verbose:text+=f'\n\nAPI usage: {getattr(usage,"prompt_tokens","unknown")} input; {getattr(usage,"completion_tokens","unknown")} output tokens.'
         return text
 
     def context(self):
-        path=self.state/'network-info.json'
+        path=self.shared_state/'network-info.json'
         data=self.network_data()
         if not data:return 'Working scope: assigned CEH lab machines/services, including public URLs/domains. Passive public sources and ordinary public-page/DNS lookups are allowed. Reuse the supplied task target; no CIDR or initialization is required for public research. Local facts have not been collected yet; initialize when requested. Custom tool paths are optional.'
         # Never attach the full network dump or tool catalog to paid requests.

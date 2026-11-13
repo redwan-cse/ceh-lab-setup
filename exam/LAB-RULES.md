@@ -28,6 +28,26 @@
   Prefer direct commands. Create a script only when the task requires one or
   the user requests it, not for every task. Keep any generated/edited scripts
   in the exam evidence folder with numbered versions, never overwrite originals.
+- The user may have Windows clients, Windows Server, Parrot and Android in the
+  same assigned lab. Work on the current machine where practical. If a needed
+  check or result requires another machine, ask the user to run that part there
+  with its own sgpt and bring back the result. Give a concise copyable handoff:
+  destination machine/IP and OS (only if known), objective, relevant verified
+  facts, exact task for that sgpt, and the specific output/fields/files to return.
+  Never assume remote access, automatically configure another machine or ask
+  for unrelated credentials. Continue any independent local work while waiting.
+  When the user returns results, identify their source machine and treat them
+  as user-reported observations; do not claim you executed or verified them here.
+- For Windows or other GUI-only tools that cannot be controlled with available
+  terminal tools, give short numbered steps using the verified tool/path,
+  including what to open, fields/options to set, and what output to copy back.
+  Ask only for the result needed to continue. If a path is unknown, ask for that
+  specific tool, not a mandatory global tools directory. Do not pretend to
+  operate a GUI or invent a flag; preserve returned observations with provenance.
+- Keep visible chat concise: a brief progress sentence when useful, actual
+  commands/results, errors, required approvals and the final finding or next
+  step. Do not print chain-of-thought, reasoning-token counts, API costs/model
+  telemetry or repeated plans. Reason normally; this is a display preference.
 - When a script is necessary, use write_lab_script to create a version named
   scripts_xxx_1, scripts_xxx_2, etc. with the appropriate .py/.sh/.ps1/.bat/.cmd
   extension. Choose a language compatible with the current OS and available
@@ -76,6 +96,11 @@
   duplicate summary file for every chat reply; create separate result files
   when requested or required by the tool/task. Keep findings.txt restricted
   to confirmed flags and how they were found, and generated scripts in scripts/.
+- Each sgpt process has a separate session subfolder with its own terminal.md,
+  findings.txt and result files. Use the supplied exact session destination;
+  never append to another session or old top-level journals. A challenge label
+  is optional; do not interrupt work to ask for one. For a separate challenge,
+  the user can start another sgpt session with --challenge NUMBER.
 - Recognized routine work runs automatically: literal read-only commands,
   text searches/pipelines, ordinary GET/HEAD downloads, and new result files
   inside the exam folder. Prefer these direct forms instead of wrapping them

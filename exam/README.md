@@ -388,13 +388,36 @@ use a saved `--chat` conversation; it cannot recover unsaved process memory.
 
 ## Markdown evidence by IP
 
-The Desktop has two readable evidence files per IP:
+Every sgpt process creates a unique session folder under the filing IP. Its
+commands/output and confirmed findings stay together, separate from other
+terminals and challenges:
 
 ```text
 Desktop/CEH-Exam/10.10.10.13/
-    terminal.md
-    findings.txt
+    sessions/
+        challenge-5_<UTC-time>_<unique-id>/
+            terminal.md
+            findings.txt
+            scripts/                 (only if needed)
+        challenge-6_<UTC-time>_<unique-id>/
+            terminal.md
+            findings.txt
 ```
+
+Optional labels work the same in PowerShell and Bash:
+
+```text
+sgpt --challenge 5 "Work on this challenge"
+sgpt --challenge 6 --repl challenge6
+```
+
+If the initial prompt says `challenge 5`, that number labels the folder
+automatically. Otherwise the folder starts with `session_`; no question is
+asked. Starting two sessions with the same label still creates distinct folders.
+The label is chosen when the process starts. Use another process for a separate
+challenge; an ongoing chat stays in its original folder. One-shot calls also
+get separate folders. To resume later, name the earlier report paths or use your
+saved `--chat` conversation; new output is saved in the new session.
 
 That IP is an example, not a configured address. The default folder uses the
 local IPv4 selected by the routing table. On multihomed machines, select the
@@ -425,7 +448,17 @@ answers, reviews, API usage and timing. It captures sgpt activity, not other
 terminals or GUI windows. Known saved keys are redacted; other sensitive
 evidence can remain. ANSI codes are removed; indented terminal lines preserve
 spacing without turning captured text into Markdown instructions or links.
-Old `terminal.txt` files remain historical; new output uses `terminal.md`.
+Old top-level `terminal.md`, `terminal.txt` and findings remain untouched.
+
+Normal terminal output shows the conversation, commands, actual results,
+required approvals and errors. API usage, model/timing records and routine
+approval status are still saved in that session's transcript but are hidden
+from the console. This changes display only; provider-default reasoning and
+stored tool metadata are preserved, including in `--shell` mode. For diagnostics:
+
+```text
+sgpt --verbose "Your task"
+```
 
 `findings.txt` contains only `Flag:` and `How found:` blocks backed by actual
 command output or your reported observations. AI text alone is insufficient.
@@ -435,11 +468,30 @@ After observing a GUI result, for example:
 sgpt --target-ip 10.10.10.9 "I found FLAG_VALUE in the GUI using these steps: ... Save the flag and how it was found."
 ```
 
-Small summaries, tool indexes and output byte offsets live under
-`.config/shell_gpt_exam/state/<IP>`. Full output is stored once in the transcript;
-no duplicate network-dump/review files are created on the Desktop. Old indexed
-command evidence still works. [LAB-RULES.md](LAB-RULES.md) supplies static rules;
+Host facts and optional tool settings remain shared under
+`.config/shell_gpt_exam/state/<IP>`. Session status, owned-script indexes and
+command-output offsets live in its `sessions/<session>/` subfolder. Findings
+use that session's command evidence or observations you explicitly supply;
+another session's output is not silently treated as current evidence. Full
+output is stored once in the transcript. [LAB-RULES.md](LAB-RULES.md) supplies static rules;
 observed data stays lower-trust context instead of accumulating in chat history.
+
+### Another machine or a GUI-only tool
+
+When a required check belongs on another assigned Windows/Server/Parrot/Android
+machine, sgpt asks you to handle the handoff. It provides the destination
+machine/IP and OS if known, the objective and verified context, a copyable
+request for sgpt there, and the exact fields/output to return. Install sgpt on
+that machine if needed, run that part, then paste the results into the original
+chat with the source machine. It can continue independent local checks while
+waiting. It does not assume remote access or automatically sync sessions.
+
+For a GUI-only tool, it gives short numbered steps, including what to open,
+options/fields to use and which results to copy back. A particular missing tool
+path may be requested when needed; a global tools folder remains optional.
+Reported GUI/remote observations are identified as user-reported, never as
+commands executed here. Confirmed findings still contain only the flag and how
+it was found, including the source machine/manual step when relevant.
 
 ## Find tools and task guidance
 

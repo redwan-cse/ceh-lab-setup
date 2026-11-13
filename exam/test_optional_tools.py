@@ -7,6 +7,7 @@ from exam_workflow import Workflow
 
 def workflow(root):
     w=Workflow.__new__(Workflow);w.state=root/'state';w.state.mkdir()
+    w.shared_state=w.state
     w.folder=root/'report';w.folder.mkdir();w.secret='';w.recent_evidence=[]
     return w
 

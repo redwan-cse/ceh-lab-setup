@@ -145,6 +145,8 @@ def main():
     options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
     options.add_argument('--tools-path',help='Optional file/folder to use for this account; never required')
     options.add_argument('--manual-approval',action='store_true',help='Disable the AI approval reviewer for this invocation')
+    options.add_argument('--challenge',help='Optional challenge label for this session, for example 5')
+    options.add_argument('--verbose',action='store_true',help='Also print API usage and routine status details (always saved in evidence)')
     options.add_argument('--tool-rounds',type=tool_rounds,default=DEFAULT_TOOL_ROUNDS,help='Model/API rounds before offering continuation (1-100; default 40)')
     options.add_argument('--model-info',action='store_true',help='Show configured model/endpoint locally, without an API call')
     extra,remaining=options.parse_known_args(sys.argv[1:])
@@ -158,8 +160,12 @@ def main():
     for name in values:os.environ.pop(name,None)
     os.environ.pop('REASONING_EFFORT',None)
     for name,value in profile_chat_paths(path.parent,profile).items():os.environ[name]=value
-    from exam_workflow import Workflow,find_reference
-    workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip)
+    from exam_workflow import Workflow,find_reference,challenge_label
+    label=extra.challenge
+    if label is None:
+        inferred=challenge_label(' '.join(remaining))
+        if inferred:label=inferred.removeprefix('challenge-')
+    workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip,session=True,challenge=label,verbose=extra.verbose)
     os.environ['CEH_EXAM_DIR']=str(workflow.folder)
     workflow.start_transcript()
     task_status(workflow,profile,False,'pending')
@@ -191,7 +197,7 @@ def main():
             task_status(workflow,profile,True,'failed')
             print('Local results saved. Model review skipped: configure the selected provider API key first.');return
         try:
-            print(workflow.review(ProviderCalls(values,workflow.emit),values.get('REVIEW_MODEL') or values['DEFAULT_MODEL']))
+            print(workflow.review(ProviderCalls(values,workflow.diagnostic),values.get('REVIEW_MODEL') or values['DEFAULT_MODEL']))
             task_status(workflow,profile,True,'passed')
         except Exception as exc:
             task_status(workflow,profile,True,'failed')
@@ -220,13 +226,15 @@ def main():
                 from routine_commands import classify_linux,run_linux
                 plan=classify_linux(value,workflow.folder,guard.trusted_executable)
             if plan:
-                print('[sgpt] Automatically running recognized routine workflow:\n'+value,flush=True)
+                workflow.diagnostic('[sgpt] Automatically running recognized routine workflow:\n'+value)
                 result=run_linux(plan,guard.run_pipeline)
             else:
                 import inspect
-                if not extra.manual_approval and 'auto_approve' in inspect.signature(original_execute).parameters:
-                    result=original_execute(value,auto_approve=approval_reviewer.approve)
-                else:result=original_execute(value)
+                supported=inspect.signature(original_execute).parameters
+                options={}
+                if 'status' in supported:options['status']=workflow.diagnostic
+                if not extra.manual_approval and 'auto_approve' in supported:options['auto_approve']=approval_reviewer.approve
+                result=original_execute(value,**options)
             if result.startswith('Command not executed: approval was not given.'):
                 if not interactive_session:result+=' No interactive input is available. Run sgpt in a terminal (use ssh -tt for SSH) to type an approval; no command was executed.'
                 return ApprovalRefusal(result)
@@ -236,10 +244,10 @@ def main():
     handler.client.api_key=values.get('OPENAI_API_KEY','offline-version-check')
     handler.client.base_url=values['API_BASE_URL']
     handler.client.max_retries=0;handler.client.timeout=90
-    calls=ProviderCalls(values,workflow.emit,handler.client)
+    calls=ProviderCalls(values,workflow.diagnostic,handler.client)
     task={'completed':False,'answer':'','reviewed':False,'prompt':''}
     from ai_approval import ApprovalReviewer
-    approval_reviewer=ApprovalReviewer(calls,values['DEFAULT_MODEL'],workflow.folder,workflow.emit,workflow.redact,lambda:task['prompt'])
+    approval_reviewer=ApprovalReviewer(calls,values['DEFAULT_MODEL'],workflow.folder,workflow.emit,workflow.redact,lambda:task['prompt'],diagnostic=workflow.diagnostic)
     if not extra.manual_approval:
         scripts.approval_reviewer=lambda command,path:approval_reviewer.approve(command,script_source=path.read_text(encoding='utf-8'),cwd=path.parent)
     def audit():

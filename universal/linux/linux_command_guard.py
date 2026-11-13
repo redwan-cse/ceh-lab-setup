@@ -136,13 +136,14 @@ def run_pipeline(pipeline,cwd=None,stdout_path=None,append=False,env=None):
                     process.stdout.close()
 
 
-def execute_command(command,auto_approve=None):
+def execute_command(command,auto_approve=None,status=None):
     try:
         decision = classify(command)
     except Exception:
         return 'Command not executed: approval policy failed.'
     if decision['automatic']:
-        print('[sgpt] Automatically running recognized inspection command:\n' + command, flush=True)
+        if status:status('[sgpt] Automatically running recognized inspection command:\n'+command)
+        else:print('[sgpt] Automatically running recognized inspection command:\n' + command, flush=True)
         return run_pipeline(decision['argv'])
     if auto_approve is not None and auto_approve(command):
         environment={key:value for key,value in os.environ.items() if key not in ('BASH_ENV','ENV','SHELLOPTS','BASHOPTS') and not key.startswith('BASH_FUNC_')}

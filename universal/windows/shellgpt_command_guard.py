@@ -31,7 +31,7 @@ def classify(command):
     return decision
 
 
-def execute_command(command,auto_approve=None):
+def execute_command(command,auto_approve=None,status=None):
     try:
         decision = classify(command)
     except Exception:
@@ -39,7 +39,8 @@ def execute_command(command,auto_approve=None):
     if decision['automatic']:
         # Import qualified cmdlets only from system modules in a fresh session.
         code = '$env:PSModulePath = Join-Path $PSHOME "Modules"; ' + decision['command']
-        print('[sgpt] Automatically running recognized inspection command:\n' + command, flush=True)
+        if status:status('[sgpt] Automatically running recognized inspection command:\n'+command)
+        else:print('[sgpt] Automatically running recognized inspection command:\n' + command, flush=True)
     elif auto_approve is not None and auto_approve(command):
         code='$env:PSModulePath = Join-Path $PSHOME "Modules"; '+command
     else:

@@ -47,9 +47,9 @@ must return approve:false. Do not add commentary.'''
 
 
 class ApprovalReviewer:
-    def __init__(self,client,model,folder,emit,redact,task=lambda:''):
+    def __init__(self,client,model,folder,emit,redact,task=lambda:'',diagnostic=None):
         self.client=client;self.model=model;self.folder=Path(folder).absolute()
-        self.emit=emit;self.redact=redact;self.task=task;self.cache={}
+        self.emit=emit;self.diagnostic=diagnostic or emit;self.redact=redact;self.task=task;self.cache={}
 
     def approve(self,command,script_source='',cwd=None):
         """Return an approval, or False to request the existing human approval."""
@@ -64,7 +64,7 @@ class ApprovalReviewer:
         try:
             decision=self.cache.get(key)
             if decision is None:
-                self.emit('[sgpt] AI approval reviewer checking this operation...')
+                self.diagnostic('[sgpt] AI approval reviewer checking this operation...')
                 payload=dict(command=self.redact(command),script_source=self.redact(script_source),
                     cwd=str(cwd),exam_folder=str(self.folder),os=os.name,task=self.redact(goal))
                 response=self.client.chat.completions.create(model=self.model,stream=False,max_completion_tokens=2048,
@@ -87,7 +87,7 @@ class ApprovalReviewer:
                     value=value.replace(token,str(self.folder))
                 _output(str(Path(value).expanduser()),cwd,root,output['append'])
             self.cache[key]=decision
-            self.emit('[sgpt] AI approved this '+category.replace('_',' ')+' operation; no human prompt needed.')
+            self.diagnostic('[sgpt] AI approved this '+category.replace('_',' ')+' operation; no human prompt needed.')
             return True
         except Exception:
             self.emit('[sgpt] AI approval unavailable or uncertain; deferring to human approval. No automatic retry.')

@@ -29,12 +29,10 @@ def main():
     all_keys=[*load_keys().values(),read().get('OPENAI_API_KEY','')]
     records=[]
     for name,arguments in cases:
-        index=state/'evidence-index.jsonl'
-        before=len(index.read_text().splitlines()) if index.exists() else 0
         start=time.monotonic()
         try:
             environment=dict(os.environ,PYTHONIOENCODING='utf-8',PYTHONUTF8='1')
-            result=subprocess.run([sys.executable,str(ROOT/'exam_runtime.py'),'--profile',args.profile,*arguments],input='',capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=190,env=environment)
+            result=subprocess.run([sys.executable,str(ROOT/'exam_runtime.py'),'--profile',args.profile,'--verbose','--challenge','benchmark-'+name,*arguments],input='',capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=190,env=environment)
             output=result.stdout+result.stderr
             for key in all_keys:
                 if key:output=output.replace(key,'[REDACTED]')
@@ -43,17 +41,23 @@ def main():
             for match in re.finditer(r'\[API\] (\{[^\r\n]+\})',output):
                 try:calls.append(json.loads(match.group(1)))
                 except ValueError:pass
-            status=json.loads((state/'last-task.json').read_text()) if (state/'last-task.json').exists() else {}
+            destination=re.search(r'(?m)^Evidence folder: ([^\r\n]+)',output)
+            if not destination:raise RuntimeError('CLI did not report its session evidence folder')
+            session_folder=Path(destination[1])
+            if session_folder.parent.resolve()!=(folder/'sessions').resolve() or redirected(session_folder):raise RuntimeError('Unexpected session evidence destination')
+            session_state=state/'sessions'/session_folder.name
+            index=session_state/'evidence-index.jsonl'
+            status=json.loads((session_state/'last-task.json').read_text()) if (session_state/'last-task.json').exists() else {}
             review_pass=status.get('review')=='passed'
             passed=result.returncode==0 and status.get('completed') is True and status.get('profile')==args.profile and (review_pass or not PROFILES[args.profile]['review'] and status.get('review')=='not-required')
             tool_pass=None
             if name=='actual-command':
-                rows=[json.loads(line) for line in index.read_text().splitlines()][before:] if index.exists() else []
+                rows=[json.loads(line) for line in index.read_text().splitlines()] if index.exists() else []
                 actual=[]
                 for row in rows:
                     filename=row.get('file','terminal.txt')
-                    if filename not in ('terminal.txt','terminal.md') or redirected(folder/filename):raise RuntimeError('Invalid evidence source')
-                    with (folder/filename).open('rb') as stream:
+                    if filename not in ('terminal.txt','terminal.md') or redirected(session_folder/filename):raise RuntimeError('Invalid evidence source')
+                    with (session_folder/filename).open('rb') as stream:
                         stream.seek(row['start']);actual.append(stream.read(row['end']-row['start']).decode())
                 tool_pass=len(actual)==1 and 'Exit code: 0' in actual[0] and bool(re.search(r'\b20\d\d\b',actual[0]))
                 passed=passed and tool_pass

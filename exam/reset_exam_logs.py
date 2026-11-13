@@ -17,12 +17,21 @@ def reset_logs(root,state,clear=False):
             if redirected(folder):raise RuntimeError('Redirected report/state folder refused')
             if not folder.is_dir():continue
             if folder.parent.resolve()!=parent.resolve():raise RuntimeError('Reset path escaped expected root')
-            for name in names:
-                path=folder/name
-                if redirected(path):raise RuntimeError('Redirected log refused')
-                if path.exists():
-                    if not path.is_file():raise RuntimeError('Unexpected directory in place of a log')
-                    targets.append(path)
+            locations=[folder]
+            sessions=folder/'sessions'
+            if redirected(sessions):raise RuntimeError('Redirected sessions folder refused')
+            if sessions.exists():
+                if not sessions.is_dir():raise RuntimeError('Unexpected sessions file')
+                for session in sessions.iterdir():
+                    if redirected(session):raise RuntimeError('Redirected session refused')
+                    if session.is_dir():locations.append(session)
+            for location in locations:
+                for name in names:
+                    path=location/name
+                    if redirected(path):raise RuntimeError('Redirected log refused')
+                    if path.exists():
+                        if not path.is_file():raise RuntimeError('Unexpected directory in place of a log')
+                        targets.append(path)
     for path in targets:
         print(('Removing: ' if clear else 'Would remove: ')+str(path))
         if clear:path.unlink()

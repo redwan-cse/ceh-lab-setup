@@ -84,8 +84,11 @@ runs the native Bash collector for host identity, addresses, routes/DNS, cached
 neighbors and available tools, followed by one bounded model review. It does
 not scan other machines. See [scope and evidence rules](exam/README.md#initialize-and-inspect-safely).
 
-New commands/output go to `~/Desktop/CEH-Exam/<IP>/terminal.md` (or the configured
-Desktop location). Confirmed flags and how they were found go to `findings.txt`.
+Each sgpt process saves its own `terminal.md` and `findings.txt` together under
+`~/Desktop/CEH-Exam/<IP>/sessions/<session>/` (or the configured Desktop).
+Use `sgpt --challenge 5 "Your task"` to label a challenge; labels are optional.
+API/token/status details are saved but hidden in normal terminal output;
+add `--verbose` to display them. Reasoning remains enabled as configured.
 Old evidence is preserved. Recognized routine forms run immediately; other
 commands and owned scripts receive automatic approval review from the same
 active model. Routine work does not need you to type yes. Installation, deletion,
@@ -197,8 +200,11 @@ sgpt --repl work "Help me inspect this machine"
 Initialization selects the native PowerShell collector for host identity,
 addresses, routes/DNS, cached neighbors and available tools, followed by one
 bounded model review. It does not scan other machines. New evidence goes to
-`Desktop\CEH-Exam\<IP>\terminal.md` and `findings.txt` under this account's actual
-Desktop. Existing evidence and the command-approval guard are retained.
+`Desktop\CEH-Exam\<IP>\sessions\<session>\terminal.md` and `findings.txt` under
+this account's actual Desktop. Each process has its own folder, so parallel
+challenges stay separate. Use `sgpt --challenge 5 "Your task"` for a label.
+API/token/status details stay in the saved log; `--verbose` displays them too.
+Existing evidence and the command-approval guard are retained.
 
 All saved final results—including tool lists, reports and scan exports—belong
 in this exam folder. Tools folders remain input locations. sgpt receives the
@@ -247,6 +253,18 @@ If setup used its app-local Python instead:
 
 The dedicated exam environment, keys and private state are removed. Desktop
 evidence and Python itself remain. [Full exam guide](exam/README.md).
+
+## Exam: working across machines and GUI tools
+
+If sgpt needs a result from another assigned lab machine, it will ask you and
+provide a copyable task for sgpt on that machine, with the specific output to
+bring back. Paste that result into the original chat. This works with Windows,
+Windows Server, Parrot and Android workflows; sessions are not automatically
+connected or synced.
+
+For a GUI-only tool, sgpt gives numbered manual steps and tells you which fields
+or output to report. It treats your reply as a reported observation and records
+the source in how the finding was found. [Session folders and examples](exam/README.md#markdown-evidence-by-ip).
 
 ## Exam: Android target
 

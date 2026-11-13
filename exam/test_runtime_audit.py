@@ -38,13 +38,17 @@ class RuntimeAuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             workflow=Workflow(Path(directory))
             arguments=['sgpt','--no-cache']+(['--no-functions','--shell'] if shell else [])+['Offline integration fixture']
-            with patch('exam_workflow.Workflow',return_value=workflow),patch.object(workflow,'start_transcript'),patch.object(handler.client.chat.completions,'create',side_effect=create),patch.object(handler.Handler,'get_completion',handler.Handler.get_completion),patch.object(guard,'execute_command',guard.execute_command),patch('sys.argv',arguments),patch('sys.stdin',io.StringIO('')),patch('builtins.input',side_effect=AssertionError('Unexpected approval prompt')):
+            visible=io.StringIO()
+            with patch('exam_workflow.Workflow',return_value=workflow),patch.object(workflow,'start_transcript'),patch.object(handler.client.chat.completions,'create',side_effect=create),patch.object(handler.Handler,'get_completion',handler.Handler.get_completion),patch.object(guard,'execute_command',guard.execute_command),patch('sys.argv',arguments),patch('sys.stdin',io.StringIO('')),patch('builtins.input',side_effect=AssertionError('Unexpected approval prompt')),patch('sys.stdout',visible):
                 try:exam_runtime.main()
                 except SystemExit as exc:self.assertIn(exc.code,(0,None))
             records=[json.loads(line) for line in (workflow.state/'evidence-index.jsonl').read_text().splitlines()]
             self.assertEqual(len(records),1)
             self.assertIn('    OUTPUT:\n    Exit code: 0',workflow.log.read_text())
             self.assertEqual(len(calls),1 if shell else 2)
+            self.assertNotIn('[API]',visible.getvalue())
+            self.assertNotIn('Automatically running',visible.getvalue())
+            self.assertIn('[API]',workflow.log.read_text())
 
     def test_shell_command_is_audited(self):self.run_cli(True)
     def test_tool_command_is_audited(self):self.run_cli(False)
