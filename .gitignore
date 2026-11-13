@@ -9,6 +9,7 @@
 !/docs/
 /docs/*
 !/docs/ceh-tools/
+!/docs/ceh-ebook/
 
 # Never publish runtime credentials, profiles, logs, caches or local archives.
 **/__pycache__/
@@ -41,3 +42,5 @@
 # The reference directory is documentation, not the deployed tools library.
 !/docs/ceh-tools/
 !/docs/ceh-tools/*.md
+!/docs/ceh-ebook/
+!/docs/ceh-ebook/*.md

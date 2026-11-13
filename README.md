@@ -405,6 +405,7 @@ All maintained guides are kept in this repository and published together:
 - [ShellGPT task rules](exam/LAB-RULES.md)
 - [Normal-model API budget and batch explanation](exam/API-COSTS.md)
 - [CEH tool commands and workflows](docs/ceh-tools/README.md)
+- [CEH v13 Practical Lab Guide & E-Book (Modules 01–20)](docs/ceh-ebook/README.md)
 - [Local tool inventory summary](docs/ceh-tools/inventory.md), [Parrot inventory](docs/ceh-tools/inventory-linux.md), [Windows inventory](docs/ceh-tools/inventory-windows.md)
 - [Earlier model comparison](exam/COMPARISON.md) and [terminal challenges](exam/LAB-CHALLENGES.md), with their historical settings
 - [Complete local lab guide](ceh-local-lab/README.md) and [health report](ceh-local-lab/HEALTH-REPORT.md)
