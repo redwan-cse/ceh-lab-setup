@@ -401,6 +401,7 @@ All maintained guides are kept in this repository and published together:
 - [Full exam setup, scope, evidence, reasoning and recovery guide](exam/README.md)
 - [sgpt command reference: standard options, custom options and examples](exam/SGPT-COMMANDS.md)
 - [Windows/Parrot validation results and repeatable smoke checks](exam/VALIDATION.md)
+- [Exam field feedback and next-version recommendations, 14 November 2026](exam/FIELD-FEEDBACK-2026-11-14.md)
 - [Normal chat, optional tools paths and versioned scripts](exam/README.md#normal-chat-optional-paths-and-scripts)
 - [ShellGPT task rules](exam/LAB-RULES.md)
 - [Normal-model API budget and batch explanation](exam/API-COSTS.md)

@@ -1,5 +1,10 @@
 # Windows and Parrot validation
 
+**Field update, 14 November 2026:** the user reported failures and repeated
+approval interruptions during a full exam with several terminals. The results
+below describe short functional checks, not a six-hour concurrent reliability
+certification. See the [field feedback and next-version recommendations](FIELD-FEEDBACK-2026-11-14.md).
+
 Checked on **13 November 2026**. No unresolved sgpt failure was found in the
 checks below. This validates the current installed setup and these two VMs;
 it is not a guarantee about every future cloud image, GUI tool or provider outage.
