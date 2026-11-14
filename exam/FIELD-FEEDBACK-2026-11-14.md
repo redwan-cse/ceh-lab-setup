@@ -16,8 +16,11 @@ The exam screenshots also show multiple assigned subnets and explicit excluded
 addresses. They are historical context, not permission or default targets for
 future work. No exam questions, credentials or screenshots are reproduced here.
 
-Exact API status codes and approval causes still require the saved exam logs.
-Concurrency alone is not proof that every failure was a rate limit.
+The user confirmed that the six-hour exam machines shut down automatically and
+their terminal logs were lost. Exact per-session error codes, commands and
+approval reasons are therefore unavailable for this review. Diagnose the code
+and reproduce representative failures in practice; do not present an assumed
+rate limit or timeout as the verified cause of an exam incident.
 
 ## Confirmed in the code
 
@@ -102,6 +105,29 @@ The next kit should provide a simple two-way inbox/outbox workflow and key setup
 GUI-only Windows tools still need numbered manual instructions and a precise
 description of the results to return. SSH does not provide GUI control itself.
 
+### Evidence must survive lab expiry
+
+A shared folder on Parrot or the exam Windows machine is useful for coordination,
+but both are temporary. The next version needs a separate export path outside
+the expiring lab, using a transfer mechanism supported and permitted by the lab.
+Do not assume its private addresses are reachable from the user's physical PC.
+
+- Keep session transcripts, readable findings, shared facts, generated scripts
+  and compact diagnostic records together in an exportable evidence bundle.
+- Record sanitized error categories/status codes, request IDs, retry attempts,
+  tool-call IDs and exact approval reasons so the next incident is diagnosable.
+- Propose incremental exports every 5–10 minutes and after confirmed findings,
+  plus a manual final export before expiry. Make the last successful export
+  time and transfer failures visible; an archive created only inside the lab
+  is not a completed external backup.
+- Prefer the user's physical PC as the durable destination when a supported
+  transfer route exists. Otherwise test an explicitly approved private
+  destination or download workflow during practice.
+- Exclude API keys, key vaults, SSH private keys and secret configuration files.
+  Keep exam evidence outside the code repository.
+- Verify the exported bundle is complete and readable after simulated VM loss.
+  Sharing within the lab and durable export are separate requirements.
+
 ### Availability fallback
 
 Keep DeepSeek as the measured baseline. A backup can use the same OpenRouter
@@ -139,8 +165,8 @@ or reuse a prior exam's network addresses. Preserve assigned public-task handlin
    while multiple sessions remain usable.
 2. Restart after a command completes but before its next model response, and
    verify that the command is not executed twice.
-3. Verify approval behavior using actual routine commands from saved transcripts,
-   and distinguish the reasons for any remaining manual decisions.
+3. Verify approval behavior using representative routine commands captured during
+   practice, and distinguish the reasons for any remaining manual decisions.
 4. Save and read multiline findings from both operating systems; verify shared
    facts appear without lost updates or invented verification status.
 5. Transfer files in both directions through Windows-to-Parrot SSH/SCP.
@@ -148,6 +174,8 @@ or reuse a prior exam's network addresses. Preserve assigned public-task handlin
 7. Complete repeated six-hour rehearsals with two or three terminals, deliberate
    interruptions and known-answer tasks. Record accuracy, recovery time and human
    interruptions separately from API cost.
+8. Stop/delete the disposable practice VMs and confirm that transcripts,
+   findings and diagnostics can still be read from the external export.
 
 ## References
 
