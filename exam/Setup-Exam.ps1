@@ -57,6 +57,20 @@ if($pythonExit -ne 0){throw 'Exam setup failed.'}
 $wrapper=Join-Path $env:LOCALAPPDATA 'CEHLab\shellgpt-exam\bin\sgpt.cmd'
 & $wrapper --version
 if($LASTEXITCODE -ne 0){throw 'ShellGPT was installed but the launcher self-check failed. Inspect the output above.'}
+# Neutralize shadowing sgpt.exe in Python scripts directories if present
+$pyScripts = @(
+    Join-Path $env:APPDATA 'Python\Python*\Scripts'
+    Join-Path $env:LOCALAPPDATA 'Programs\Python\Python*\Scripts'
+)
+foreach($pattern in $pyScripts){
+    Get-ChildItem -Path $pattern -Filter 'sgpt.exe' -ErrorAction SilentlyContinue | ForEach-Object {
+        $backup = "$($_.FullName).before-exam"
+        if(-not (Test-Path -LiteralPath $backup)){
+            Move-Item -LiteralPath $_.FullName -Destination $backup -Force -ErrorAction SilentlyContinue
+        }
+        Copy-Item -LiteralPath $wrapper -Destination (Join-Path $_.DirectoryName 'sgpt.cmd') -Force -ErrorAction SilentlyContinue
+    }
+}
 Write-Host 'Launcher check passed. User PATH is saved and sgpt is ready in this setup process.'
 Write-Host 'An already-open parent terminal keeps its old PATH. In that window, run:'
 Write-Host '$env:Path = "$env:LOCALAPPDATA\CEHLab\shellgpt-exam\bin;$env:Path"'

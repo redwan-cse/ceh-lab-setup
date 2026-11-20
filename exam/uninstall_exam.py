@@ -81,6 +81,24 @@ def main():
         if path==canonical or owned_wrapper(path,runtime):
             clean_wrapper(path,runtime,args.dry_run,backup=backup if path==canonical else None)
     if os.name=='nt' and not args.dry_run:
+        scripts_candidates=[]
+        appdata=os.environ.get('APPDATA')
+        if appdata:
+            scripts_candidates.extend(Path(appdata).glob('Python/Python*/Scripts'))
+        localappdata=os.environ.get('LOCALAPPDATA')
+        if localappdata:
+            scripts_candidates.extend(Path(localappdata).glob('Programs/Python/Python*/Scripts'))
+        for sc in scripts_candidates:
+            if sc.is_dir() and not redirected(sc):
+                backup_exe=sc/'sgpt.exe.before-exam'
+                orig_exe=sc/'sgpt.exe'
+                if backup_exe.is_file():
+                    try:os.replace(backup_exe,orig_exe)
+                    except OSError:pass
+                extra_cmd=sc/'sgpt.cmd'
+                if extra_cmd.is_file() and owned_wrapper(extra_cmd,runtime):
+                    try:extra_cmd.unlink()
+                    except OSError:pass
         import winreg
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER,'Environment') as reg:
             try:value,kind=winreg.QueryValueEx(reg,'Path')

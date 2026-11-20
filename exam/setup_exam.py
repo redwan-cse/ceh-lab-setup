@@ -286,6 +286,27 @@ def write_wrappers(profile=None,activate=False,local_lab=False):
     for name in ('sgpt-exam','sgpt-lab'):
         alias=bin_dir/(name+suffix)
         if owned_wrapper(alias,runtime):alias.unlink()
+    if os.name=='nt':
+        # Check standard user Python scripts locations for preexisting unowned sgpt.exe
+        scripts_candidates=[]
+        appdata=os.environ.get('APPDATA')
+        if appdata:
+            scripts_candidates.extend(Path(appdata).glob('Python/Python*/Scripts'))
+        localappdata=os.environ.get('LOCALAPPDATA')
+        if localappdata:
+            scripts_candidates.extend(Path(localappdata).glob('Programs/Python/Python*/Scripts'))
+        for sc in scripts_candidates:
+            if sc.is_dir() and not redirected_cli(sc):
+                old_exe=sc/'sgpt.exe'
+                if old_exe.is_file() and not redirected_cli(old_exe):
+                    backup_exe=sc/'sgpt.exe.before-exam'
+                    if not backup_exe.exists():
+                        try:os.replace(old_exe,backup_exe)
+                        except OSError:pass
+                extra_cmd=sc/'sgpt.cmd'
+                if not extra_cmd.exists() or owned_wrapper(extra_cmd,runtime):
+                    try:atomic_private_write(extra_cmd,wrapper)
+                    except OSError:pass
     return bin_dir
 
 
