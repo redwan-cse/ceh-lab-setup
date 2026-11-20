@@ -23,6 +23,18 @@ Routine operations use automatic approval. Installations, deletions, critical
 changes and uncertain operations still require a human decision. Required
 approval needs an interactive terminal; use `ssh -tt` for interactive SSH work.
 
+For routine local checks, use the full command name and literal arguments. On
+Linux, recognized forms include `ip -br address show`, `ip route show`, and
+`find . -maxdepth 2 -type f -name '*.txt'`. On Windows, use `Get-ChildItem`,
+`Get-NetIPConfiguration`, `Get-NetIPAddress -AddressFamily IPv4`, and
+`Get-NetRoute`. The operation and arguments determine whether a command can
+run automatically. Using an installed tool alone does not guarantee approval.
+
+ShellGPT can create and revise its own numbered script drafts without asking.
+It saves each revision in the current session. Running a new version uses the
+normal execution review. Running the same unchanged, approved version again
+in the same chat process reuses its approval.
+
 ## Standard ShellGPT options
 
 These come from ShellGPT; the exam wrapper adds its workflow and logging.
@@ -45,6 +57,11 @@ These come from ShellGPT; the exam wrapper adds its workflow and logging.
 different purposes. History is separated by provider. Each new process still
 gets a new output folder, even when reusing a chat name.
 
+Use a different chat name in each active terminal. Two bare `sgpt` commands
+both select the chat named `lab`. If a chat already has an active writer, a
+second terminal reports the conflict immediately. Close the first terminal's
+chat before resuming that name, or use another name for independent work.
+
 Long chats keep complete tool exchanges. Older turns can leave the bounded
 conversation cache; the full transcript remains saved. Give the earlier report
 path when you need sgpt to inspect details no longer in its chat context.
@@ -55,7 +72,12 @@ These are implemented by this repository's `sgpt` wrapper.
 
 | Option or request | Effect |
 | --- | --- |
-| `sgpt --model-info` | Show the configured provider, model and endpoint locally, without an API request. |
+| `sgpt --model-info` | Show the configured provider, model, endpoint and persistent approval mode locally, without an API request. |
+| `sgpt --mode default` | Persistently set **default mode**: runs commands and scripts automatically except dangerous operations (deletions, installs, service/firewall/network changes, `sudo`), which prompt for permission. |
+| `sgpt --mode turbo` | Persistently set **turbo mode**: runs commands and scripts automatically without interactive permission prompts. |
+| `sgpt --show-findings` | Display the shared verified findings board (`shared-findings.md`) locally, without an API request. |
+| `sgpt --export-evidence [PATH]` | Package all transcripts, findings, shared findings, scripts and diagnostics into a sanitized `.zip` bundle (excluding API keys) before lab expiry. |
+| `sgpt --sync-peer USER@HOST` | Bidirectionally sync and merge verified shared findings with another lab machine (e.g. `attacker@10.10.10.13` or `Win11-Client@10.10.10.11`) over SSH. |
 | `sgpt "init the machine"` | Collect local host/network facts using the native OS collector, then request a short model review. |
 | `sgpt --init-lab` | Explicit form of initialization. |
 | `sgpt --init-lab --local-only` | Collect local facts without the paid model review. |
@@ -63,9 +85,9 @@ These are implemented by this repository's `sgpt` wrapper.
 | `--challenge 5` | Label this process's session folder. Labels may contain 1–40 letters, digits, underscores or hyphens. |
 | `--target-ip 10.10.10.9` | File evidence under that IPv4 address. This does **not** connect to the machine or change where commands execute. |
 | `--tools-path "PATH"` | Remember an optional existing tool/file/folder location. It is never a prerequisite for normal work. |
-| `--tool-rounds 60` | Set the main-agent continuation block to 60 rounds; range 1–100, default 40. A round can include multiple tool calls. Approval reviews are additional calls. |
+| `--tool-rounds 60` | Set the main-agent continuation block to 60 rounds; range 1–100, default 40. A round can include multiple tool calls. |
 | `--verbose` | Also display API usage, timing and routine status details. These are saved in the transcript even when hidden. Reasoning settings are unchanged. |
-| `--manual-approval` | Disable AI approval review for this invocation. The literal routine-command fast path remains automatic. |
+| `--manual-approval` | Disable automatic approval for non-fast-path commands in this invocation. |
 | `--profile NAME` | Advanced per-invocation provider selection using its saved key. Normally use the model switcher below to change the persistent default. |
 
 Advanced profile names are `openrouter-deepseek`, `stepfun`, `gemini-carbon`
@@ -180,9 +202,10 @@ These names are model tools, **not standalone terminal commands**:
 | `find_ceh_tools` | Look up installed commands and bounded local tool/wordlist candidates. |
 | `find_ceh_reference` | Search the bundled command/workflow reference. |
 | `set_tools_path` | Remember an optional path you explicitly supplied. |
-| `write_lab_script` | Create a numbered script version inside this session. |
+| `write_lab_script` | Create or revise a numbered script draft inside this session without execution approval. |
 | `run_lab_script` | Verify and run an owned script version after approval review. |
-| `save_finding` | Save a confirmed flag and how it was found using command or user evidence. |
+| `save_finding` | Save a confirmed flag and multiline steps using command or user evidence, updating `findings.txt` and `shared-findings.md`. |
+| `read_shared_findings` | Read confirmed findings across all challenges and synced peer machines. |
 
 Ask for the task in normal language; sgpt chooses the needed tools.
 

@@ -1,5 +1,10 @@
 """Keep tool output and interactive approvals in a stable terminal transcript."""
+import hashlib
+import os
+from pathlib import Path
 import sys
+
+from file_locking import FileLockBusy, file_lock
 
 
 class ApprovalRefusal(str):
@@ -8,6 +13,37 @@ class ApprovalRefusal(str):
 
 class ApprovalDeclined(RuntimeError):
     """Stop this task's tool loop while leaving an interactive chat available."""
+
+
+class ChatAlreadyOpen(RuntimeError):
+    """A named chat already has a live CLI writer."""
+
+
+def install_chat_writer_guard(handler_class, get_context):
+    """Own the chat before its first read and release it on CLI exit."""
+    if handler_class.__dict__.get('_ceh_chat_writer_guard'):
+        return
+    original_init = handler_class.__init__
+
+    def init(self, chat_id, *args, **kwargs):
+        context = get_context(silent=True)
+        self._ceh_chat_id = chat_id
+        if context is not None and chat_id:
+            storage = Path(self.chat_session.storage_path)
+            cache_path = os.path.normcase(str((storage / chat_id).resolve()))
+            digest = hashlib.sha256(os.fsencode(cache_path)).hexdigest()
+            lock_dir = storage.parent.parent / 'chat-locks'
+            lock_dir.mkdir(mode=0o700, exist_ok=True)
+            if lock_dir.is_symlink() or getattr(lock_dir, 'is_junction', lambda: False)():
+                raise RuntimeError('Redirected chat lock directory refused')
+            try:
+                context.with_resource(file_lock(lock_dir / (digest + '.lock'), blocking=False))
+            except FileLockBusy:
+                raise ChatAlreadyOpen('This chat is open in another terminal. Use a different --repl or --chat name, or close the other session.') from None
+        original_init(self, chat_id, *args, **kwargs)
+
+    handler_class.__init__ = init
+    handler_class._ceh_chat_writer_guard = True
 
 
 def interactive_input(prompt,interactive=None):

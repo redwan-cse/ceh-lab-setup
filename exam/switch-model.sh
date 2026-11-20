@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Select the provider used by the single sgpt command. Keys stay off command lines.
+# Select the provider or approval mode used by the single sgpt command. Keys stay off command lines.
 set -euo pipefail
 if [[ $# -ne 1 ]]; then
-    printf 'Usage: %s deepseek|stepfun\n' "$0" >&2
+    printf 'Usage: %s deepseek|stepfun|default|turbo\n' "$0" >&2
     exit 2
 fi
+mode=""
+provider=""
 case "$1" in
     deepseek) provider=openrouter-deepseek ;;
     stepfun) provider=stepfun ;;
-    *) printf 'Choose deepseek or stepfun.\n' >&2; exit 2 ;;
+    default|turbo) mode="$1" ;;
+    *) printf 'Choose deepseek, stepfun, default or turbo.\n' >&2; exit 2 ;;
 esac
 installed_root="$HOME/.local/share/shellgpt-exam"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,5 +33,8 @@ elif command -v python >/dev/null 2>&1; then
 else
     printf 'Python 3.10+ is required to switch providers. Run setup-exam.sh first.\n' >&2
     exit 1
+fi
+if [[ -n "$mode" ]]; then
+    exec "$python" "$setup" --switch-mode --mode "$mode"
 fi
 exec "$python" "$setup" --switch-provider --provider "$provider"

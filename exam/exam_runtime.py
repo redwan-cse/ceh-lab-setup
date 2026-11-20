@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from terminal_ui import ApprovalRefusal,ApprovalDeclined
+from terminal_ui import ApprovalRefusal,ApprovalDeclined,ChatAlreadyOpen
 
 
 class ProviderBlocked(RuntimeError):pass
@@ -77,11 +77,14 @@ def task_status(workflow,profile,completed,review,answer=''):
         command_count=len(workflow.recent_evidence),answer_json=structured if isinstance(structured,dict) else None)))
 
 
-def complete(client, messages, model, tools, execute, limit=DEFAULT_TOOL_ROUNDS, show_outputs=True, actions=None, history=None,show_command_outputs=True,continue_task=None):
+def complete(client, messages, model, tools, execute, limit=DEFAULT_TOOL_ROUNDS, show_outputs=True, actions=None, history=None,show_command_outputs=True,continue_task=None,on_checkpoint=None):
     if not isinstance(limit,int) or not 1<=limit<=100:raise ValueError('Tool rounds must be between 1 and 100')
     def record(message):
         messages.append(message)
         if history is not None and history is not messages:history.append(message)
+    def checkpoint():
+        if on_checkpoint is not None:
+            on_checkpoint(history if history is not None else messages)
     rounds=0
     while True:
         if rounds and rounds%limit==0:
@@ -136,17 +139,22 @@ def complete(client, messages, model, tools, execute, limit=DEFAULT_TOOL_ROUNDS,
             if isinstance(result,ApprovalRefusal):
                 for pending,_,_ in validated[position+1:]:
                     record(dict(role='tool',tool_call_id=pending['id'],content='Not executed: an earlier approval was declined.'))
+                checkpoint()
                 raise ApprovalDeclined('Approval was not given. Stopped this task without further actions or API requests; you can continue chatting.')
+        checkpoint()
 
 
 def main():
     configure_stdio()
     interactive_session=sys.stdin.isatty()
     import argparse
-    from providers import PROFILES,select_profile,ProviderCalls,review_task
-    from setup_exam import load_keys
+    from providers import PROFILES,MODES,select_profile,ProviderCalls,review_task
+    from setup_exam import load_keys,save as save_config
     options=argparse.ArgumentParser(add_help=False)
     options.add_argument('--profile',choices=PROFILES)
+    options.add_argument('--mode',choices=MODES,help='Set persistent approval mode: default or turbo')
+    options.add_argument('--turbo',action='store_true',help='Set persistent approval mode to turbo')
+    options.add_argument('--default-mode',action='store_true',help='Set persistent approval mode to default')
     options.add_argument('--target-ip')
     options.add_argument('--tool-help',help='Search installed CEH references locally, without an API call')
     options.add_argument('--tools-path',help='Optional file/folder to use for this account; never required')
@@ -155,13 +163,23 @@ def main():
     options.add_argument('--verbose',action='store_true',help='Also print API usage and routine status details (always saved in evidence)')
     options.add_argument('--tool-rounds',type=tool_rounds,default=DEFAULT_TOOL_ROUNDS,help='Model/API rounds before offering continuation (1-100; default 40)')
     options.add_argument('--model-info',action='store_true',help='Show configured model/endpoint locally, without an API call')
+    options.add_argument('--show-findings',action='store_true',help='Display the shared verified findings board locally, without an API call')
+    options.add_argument('--export-evidence',nargs='?',const='auto',help='Export a sanitized ZIP bundle of all exam transcripts, findings and scripts')
+    options.add_argument('--sync-peer',help='Sync shared verified findings bidirectionally with USER@HOST over SSH')
+    options.add_argument('--export-findings-json',action='store_true',help=argparse.SUPPRESS)
+    options.add_argument('--import-findings-json',action='store_true',help=argparse.SUPPRESS)
     extra,remaining=options.parse_known_args(sys.argv[1:])
     sys.argv=[sys.argv[0],*remaining]
     path=Path.home()/'.config'/'shell_gpt_exam'/'.sgptrc'
     values=dict(line.split('=',1) for line in path.read_text(encoding='utf-8').splitlines() if '=' in line and not line.startswith('#'))
+    requested_mode='turbo' if extra.turbo else ('default' if extra.default_mode else extra.mode)
+    if requested_mode:
+        values['EXAM_MODE']=requested_mode
+        save_config(values)
     keys=load_keys(path.parent)
     profile=extra.profile or values.get('EXAM_PROFILE','gemini-carbon' if 'googleapis.com' in values.get('API_BASE_URL','') else 'stepfun')
-    values=select_profile(values,profile,keys)
+    values=select_profile(values,profile,keys,mode=requested_mode)
+    active_mode=values.get('EXAM_MODE','default')
     # Provider/function overrides must not bypass the protected exam config.
     for name in values:os.environ.pop(name,None)
     os.environ.pop('REASONING_EFFORT',None)
@@ -171,11 +189,31 @@ def main():
     if label is None:
         inferred=challenge_label(' '.join(remaining))
         if inferred:label=inferred.removeprefix('challenge-')
-    workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip,session=True,challenge=label,verbose=extra.verbose)
+    workflow=Workflow(secret=[*keys.values(),values.get('OPENAI_API_KEY','')],target_ip=extra.target_ip,session=True,challenge=label,verbose=extra.verbose,mode=active_mode)
+    if extra.export_findings_json:
+        print(json.dumps(workflow.shared_findings(),ensure_ascii=False));return
+    if extra.import_findings_json:
+        incoming=json.loads(sys.stdin.read() or '[]')
+        merged=workflow.merge_shared_findings(incoming)
+        print(f'Imported {len(merged)} findings.');return
     os.environ['CEH_EXAM_DIR']=str(workflow.folder)
     workflow.start_transcript()
     task_status(workflow,profile,False,'pending')
     workflow.begin_task(profile,' '.join(sys.argv[1:]) if not extra.tool_help else '--tool-help '+extra.tool_help)
+    if extra.show_findings:
+        entries=workflow.shared_findings()
+        print(workflow._format_shared_findings_md(entries) if entries else 'No shared verified findings recorded yet.')
+        task_status(workflow,profile,True,'local-findings');return
+    if extra.export_evidence:
+        archive=workflow.export_evidence(None if extra.export_evidence=='auto' else extra.export_evidence)
+        print('Exported sanitized evidence bundle: '+archive)
+        task_status(workflow,profile,True,'local-export');return
+    if extra.sync_peer:
+        print(workflow.sync_peer(extra.sync_peer))
+        task_status(workflow,profile,True,'local-peer-sync');return
+    if requested_mode and not remaining and not extra.model_info and not extra.tool_help and not extra.tools_path:
+        print(f'Approval mode saved: {active_mode} (persistent)')
+        task_status(workflow,profile,True,'local-mode');return
     if extra.tools_path:
         try:print(workflow.set_tools_path(extra.tools_path,explicit=True))
         except (ValueError,OSError) as exc:
@@ -184,7 +222,7 @@ def main():
         if not remaining:
             task_status(workflow,profile,True,'local-settings');return
     if extra.model_info:
-        print('Active provider: '+profile+'\nModel: '+values['DEFAULT_MODEL']+'\nEndpoint: '+values['API_BASE_URL']+'\nReasoning effort: provider default (no native ShellGPT effort option)')
+        print('Active provider: '+profile+'\nModel: '+values['DEFAULT_MODEL']+'\nEndpoint: '+values['API_BASE_URL']+'\nApproval mode: '+active_mode+' (persistent)\nReasoning effort: provider default (no native ShellGPT effort option)')
         task_status(workflow,profile,True,'local-info');return
     if extra.tool_help:
         print(find_reference(extra.tool_help))
@@ -216,13 +254,15 @@ def main():
     sys.argv=[sys.argv[0],*remaining]
     import sgpt.handlers.handler as handler
     from lab_scripts import LabScripts
-    from terminal_ui import install_terminal_printer,install_chat_history_renderer,install_chat_cache_guard,interactive_input
+    from terminal_ui import install_terminal_printer,install_chat_history_renderer,install_chat_cache_guard,install_chat_writer_guard,interactive_input
     read_approval=lambda prompt:interactive_input(prompt,interactive=interactive_session)
     scripts=LabScripts(workflow,input_reader=read_approval)
     install_terminal_printer(handler.Handler)
-    from sgpt.handlers.chat_handler import ChatSession
+    from click import get_current_context
+    from sgpt.handlers.chat_handler import ChatHandler,ChatSession
     install_chat_cache_guard(ChatSession)
     install_chat_history_renderer(ChatSession)
+    install_chat_writer_guard(ChatHandler,get_current_context)
     from sgpt.config import cfg
     if os.name=='nt':from sgpt import shellgpt_command_guard as guard
     else:from sgpt import linux_command_guard as guard
@@ -256,7 +296,7 @@ def main():
     calls=ProviderCalls(values,workflow.diagnostic,handler.client)
     task={'completed':False,'answer':'','reviewed':False,'prompt':''}
     from ai_approval import ApprovalReviewer
-    approval_reviewer=ApprovalReviewer(calls,values['DEFAULT_MODEL'],workflow.folder,workflow.emit,workflow.redact,lambda:task['prompt'],diagnostic=workflow.diagnostic)
+    approval_reviewer=ApprovalReviewer(calls,values['DEFAULT_MODEL'],workflow.folder,workflow.emit,workflow.redact,lambda:task['prompt'],diagnostic=workflow.diagnostic,mode=active_mode)
     if not extra.manual_approval:
         scripts.approval_reviewer=lambda command,path:approval_reviewer.approve(command,script_source=path.read_text(encoding='utf-8'),cwd=path.parent)
     def audit():
@@ -293,7 +333,8 @@ def main():
                      set_tools_path=lambda path:workflow.set_tools_path(path,user_text=user_evidence),
                      write_lab_script=lambda name,language,content:json.dumps(scripts.write(name,language,content),ensure_ascii=False),
                      run_lab_script=scripts.run,
-                     save_finding=lambda flag,how_found:workflow.finding(flag,how_found,user_evidence))
+                     save_finding=lambda flag,how_found:workflow.finding(flag,how_found,user_evidence),
+                     read_shared_findings=lambda:workflow._format_shared_findings_md(workflow.shared_findings()) if workflow.shared_findings() else 'No shared verified findings yet.')
         if functions:
             functions=list(functions)
             for name,description,properties in (
@@ -303,20 +344,34 @@ def main():
                 ('write_lab_script','Only when required or requested: create/edit a numbered script copy in the exam folder. Prefer direct commands for ordinary tasks. Never executes code.',{'name':{'type':'string','description':'Stable base name without extension or version number; reuse the same base for edits.'},'language':{'type':'string','enum':['python','shell','powershell','batch','cmd']},'content':{'type':'string'}}),
                 ('run_lab_script','Run an owned script filename directly; verifies index/hash and reviews its source for AI approval. Protected or uncertain operations need human approval. Never bypass a declined approval.',{'script':{'type':'string'}}),
                 ('find_ceh_reference','Search concise tool syntax and workflows. Guidance only; verify installed tools and paths before execution.',{'query':{'type':'string'}}),
-                ('save_finding','Save only a confirmed flag and how it was found, using command or user evidence.',{'flag':{'type':'string'},'how_found':{'type':'string'}})):
+                ('save_finding','Save only a confirmed flag and how it was found (supports multiline numbered steps), using command or user evidence.',{'flag':{'type':'string'},'how_found':{'type':'string'}}),
+                ('read_shared_findings','Read confirmed flags and findings across all challenges and synced peer machines.',{})):
                 schema={'name':name,'description':description}
                 if properties:schema['parameters']={'type':'object','properties':properties,'required':list(properties)}
                 functions.append({'type':'function','function':schema})
         model=model if any(arg in ('--model','-m') or arg.startswith('--model=') for arg in remaining) else values['DEFAULT_MODEL']
+        def save_checkpoint(current_history):
+            chat_id=getattr(self,'_ceh_chat_id',None)
+            session=getattr(self,'chat_session',None)
+            if chat_id and session is not None and hasattr(session,'_write'):
+                try:session._write(current_history,chat_id)
+                except OSError:pass
         try:
             for chunk in complete(calls,prepared,model,functions,execute_command,limit=extra.tool_rounds,show_outputs=cfg.get('SHOW_FUNCTIONS_OUTPUT')=='true',actions=actions,history=messages,show_command_outputs=False,
-                                  continue_task=lambda total,block:ask_to_continue(read_approval,total,block)):
+                                  continue_task=lambda total,block:ask_to_continue(read_approval,total,block),on_checkpoint=save_checkpoint):
                 task['answer']=(task['answer']+chunk)[-1500:]
                 yield chunk
         except (ApprovalDeclined,ToolLimitReached) as exc:
             task_status(workflow,profile,False,'tool-limit' if isinstance(exc,ToolLimitReached) else 'approval-declined',task['answer'])
             if isinstance(exc,ToolLimitReached) and not interactive_session:raise
             yield '\n'+str(exc)+'\n';return
+        except Exception as exc:
+            save_checkpoint(messages)
+            task_status(workflow,profile,False,'api-error',task['answer'])
+            if '--repl' in remaining and interactive_session:
+                yield f'\n[sgpt] API turn interrupted ({type(exc).__name__}); completed commands and chat history were saved. Type "continue" in this chat to resume.\n'
+                return
+            raise
         task['completed']=True
         if values.get('REVIEW_MODEL'):
             if '--shell' not in remaining and '-s' not in remaining:yield audit()
@@ -333,7 +388,7 @@ def main():
 if __name__=='__main__':
     try:main()
     except Exception as exc:
-        if isinstance(exc,(ProviderBlocked,ProviderIncomplete)):
+        if isinstance(exc,(ProviderBlocked,ProviderIncomplete,ChatAlreadyOpen)):
             print(str(exc),file=sys.stderr);sys.exit(2)
         # Provider error bodies can echo submitted data. Never print them/keys.
         print(failure_heading(exc),file=sys.stderr)

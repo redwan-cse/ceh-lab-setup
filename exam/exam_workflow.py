@@ -14,6 +14,7 @@ import uuid
 import sys
 import hashlib
 import tempfile
+import zipfile
 from terminal_ui import ApprovalRefusal
 from file_locking import file_lock
 
@@ -119,16 +120,22 @@ def find_reference(query):
 
 
 class Workflow:
-    def __init__(self,folder=None,secret='',target_ip=None,session=False,challenge=None,verbose=False):
+    def __init__(self,folder=None,secret='',target_ip=None,session=False,challenge=None,verbose=False,mode=None):
         identity=str(ipaddress.IPv4Address(target_ip or local_ip()))
         base=Path(folder) if folder else desktop()/'CEH-Exam'/identity
         shared=base/'.state' if folder else state_root()/identity
         label=challenge_label(explicit=challenge) if challenge is not None else None
         self.session_id=((label or 'session')+'_'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'_'+uuid.uuid4().hex[:8]) if session else None
+        self.identity=identity
+        self.base=base
+        self.is_session=bool(session)
+        self.challenge_name=label or 'session'
         self.folder=base/'sessions'/self.session_id if session else base
         self.shared_state=shared
         self.state=shared/'sessions'/self.session_id if session else shared
         self.verbose=verbose
+        self.mode=mode if mode in ('default','turbo') else None
+        self._mode_announced=False
         self.secret=secret;self.recent_evidence=[];self.original_stream=None
         for path in (base,base.parent,shared,shared.parent,self.folder,self.folder.parent,self.state,self.state.parent):
             if redirected(path):raise RuntimeError('Redirected report directory refused')
@@ -197,7 +204,7 @@ class Workflow:
         self.emit('Evidence folder: '+str(self.folder)+'\nsgpt '+prompt)
 
     def write(self,name,text):
-        shared_names={'network-info.json','network-info.txt','tools-root.json','tool-index.json'}
+        shared_names={'network-info.json','network-info.txt','tools-root.json','tool-index.json','shared-findings.json'}
         destination=self.shared_state if name in shared_names else self.state
         destination.mkdir(parents=True,exist_ok=True,mode=0o700)
         if redirected(destination):raise RuntimeError('Redirected report directory refused')
@@ -217,24 +224,51 @@ class Workflow:
         finally:
             if temporary.exists():temporary.unlink()
 
+    def announce_mode(self):
+        if self.mode in ('default','turbo') and not self._mode_announced:
+            self._mode_announced=True
+            if self.mode=='turbo':
+                self.emit('[sgpt] Running in TURBO mode (persistent): commands and scripts run automatically without permission prompts.')
+            else:
+                self.emit('[sgpt] Running in DEFAULT mode (persistent): routine commands run automatically; dangerous commands ask for permission.')
+
     def execute(self,command,runner):
+        self.announce_mode()
         identifier=uuid.uuid4().hex[:12]
         record=dict(id=identifier,time=datetime.now(timezone.utc).isoformat(),command=self.redact(command))
+        ledger_path=self.state/'command-ledger.jsonl'
         # Write before running; a logging failure must not silently lose evidence.
         self.diagnostic(f'\n[{identifier}] {record["time"]}')
         self.emit('COMMAND: '+self.redact(command))
+        self.append(ledger_path,json.dumps(dict(id=identifier,time=record['time'],command=record['command'],status='started'))+'\n')
         try:
             raw=runner(command)
             refused=isinstance(raw,ApprovalRefusal)
             result=plain_text(self.redact(raw))
         except BaseException as exc:
+            self.append(ledger_path,json.dumps(dict(id=identifier,time=datetime.now(timezone.utc).isoformat(),command=record['command'],status='interrupted',error=type(exc).__name__))+'\n')
             self.emit('INTERRUPTED: '+type(exc).__name__)
             raise
         start,end=self.emit('OUTPUT:\n'+result)
         self.append(self.state/'evidence-index.jsonl',json.dumps(dict(id=identifier,file=self.log.name,start=start+len('    OUTPUT:\n'),end=end))+'\n')
+        self.append(ledger_path,json.dumps(dict(id=identifier,time=datetime.now(timezone.utc).isoformat(),command=record['command'],status='refused' if refused else 'completed',file=self.log.name,start=start+len('    OUTPUT:\n'),end=end))+'\n')
         self.recent_evidence.append(dict(command=record['command'],output=result))
         answer=f'[Command evidence: {identifier}]\n'+result
         return ApprovalRefusal(answer) if refused else answer
+
+    def command_ledger(self):
+        ledger_path=self.state/'command-ledger.jsonl'
+        if not ledger_path.exists():return []
+        if redirected(ledger_path):raise RuntimeError('Redirected command ledger refused')
+        by_id={}
+        order=[]
+        for line in ledger_path.read_text(encoding='utf-8').splitlines():
+            if not line.strip():continue
+            entry=json.loads(line)
+            cid=entry.get('id')
+            if cid not in by_id:order.append(cid)
+            by_id[cid]=entry
+        return [by_id[cid] for cid in order]
 
     def finding(self,flag,how_found,user_evidence=''):
         if not flag.strip() or re.search(r'[\x00-\x1f\x7f]',flag) or not how_found.strip():raise ValueError('Provide one flag and how it was found')
@@ -253,10 +287,191 @@ class Workflow:
                     stream.seek(record['start'])
                     outputs.append(stream.read(record['end']-record['start']).decode('utf-8'))
         if not any(flag in value for value in [*outputs,user_evidence]):raise ValueError('Flag is not present in command evidence or user-provided observations')
-        how_found=' '.join(how_found.split())
-        block=f'Flag: {flag.strip()}\nHow found: {how_found}\n\n'
+        raw_lines=[' '.join(line.split()) for line in how_found.replace('\r\n','\n').replace('\r','\n').splitlines() if line.strip()]
+        cleaned_how='\n'.join(raw_lines)
+        if len(raw_lines)<=1:
+            block=f'Flag: {flag.strip()}\nHow found: {cleaned_how}\n\n'
+        else:
+            block=f'Flag: {flag.strip()}\nHow found:\n{cleaned_how}\n\n'
         if block not in self.findings.read_text(encoding='utf-8'):self.append(self.findings,block)
+        self._record_shared_finding(flag.strip(),cleaned_how)
+        if self.is_session:
+            try:self.export_evidence(self.shared_state/f'ceh-evidence-{self.identity}-latest.zip')
+            except OSError:pass
         return 'Saved flag and how found to '+str(self.findings)+'.'
+
+    def _format_shared_findings_md(self,entries):
+        lines=['# Shared Verified Findings\n']
+        for item in entries:
+            lines.append(f"\n## Flag: {item['flag']}\n")
+            lines.append(f"- **Challenge:** {item.get('challenge','session')}\n")
+            lines.append(f"- **Target / Source IP:** {item.get('target_ip',self.identity)} (Host: {item.get('host','unknown')})\n")
+            if item.get('session_id'):lines.append(f"- **Session:** `{item['session_id']}`\n")
+            lines.append(f"- **Recorded:** {item.get('recorded_at','')}\n")
+            how=item.get('how_found','')
+            if '\n' in how:
+                lines.append('- **How found:**\n'+how+'\n')
+            else:
+                lines.append(f'- **How found:** {how}\n')
+        return ''.join(lines)
+
+    def _record_shared_finding(self,flag,how_found):
+        entry=dict(
+            flag=flag,
+            how_found=how_found,
+            challenge=self.challenge_name,
+            session_id=self.session_id,
+            target_ip=self.identity,
+            host=socket.gethostname(),
+            recorded_at=datetime.now(timezone.utc).isoformat(),
+        )
+        lock=self.shared_state/'shared-findings.lock'
+        with file_lock(lock):
+            store=self.shared_state/'shared-findings.json'
+            entries=[]
+            if store.exists() and not redirected(store):
+                try:entries=json.loads(store.read_text(encoding='utf-8'))
+                except ValueError:entries=[]
+            key=(entry['flag'],entry['challenge'],entry['target_ip'])
+            updated=False
+            for idx,existing in enumerate(entries):
+                if (existing.get('flag'),existing.get('challenge'),existing.get('target_ip'))==key:
+                    entries[idx]=entry
+                    updated=True
+                    break
+            if not updated:
+                entries.append(entry)
+            self.write('shared-findings.json',json.dumps(entries,ensure_ascii=False,indent=2))
+            md_text=self._format_shared_findings_md(entries)
+            md_target=(self.base/'shared-findings.md') if self.is_session else (self.shared_state/'shared-findings.md')
+            if not redirected(md_target):
+                md_target.write_text(self.redact(md_text),encoding='utf-8')
+            if self.is_session and self.base.parent.name=='CEH-Exam' and not redirected(self.base.parent):
+                top_md=self.base.parent/'shared-findings.md'
+                if not redirected(top_md):
+                    top_md.write_text(self.redact(md_text),encoding='utf-8')
+
+    def shared_findings(self):
+        store=self.shared_state/'shared-findings.json'
+        if not store.exists():return []
+        if redirected(store):raise RuntimeError('Redirected shared findings store refused')
+        try:
+            data=json.loads(store.read_text(encoding='utf-8'))
+            return data if isinstance(data,list) else []
+        except ValueError:
+            return []
+
+    def merge_shared_findings(self,external_entries):
+        if not isinstance(external_entries,list):raise ValueError('Expected a list of finding records')
+        lock=self.shared_state/'shared-findings.lock'
+        with file_lock(lock):
+            entries=self.shared_findings()
+            index={(e.get('flag'),e.get('challenge'),e.get('target_ip')):i for i,e in enumerate(entries)}
+            for item in external_entries:
+                if not isinstance(item,dict):continue
+                flag=str(item.get('flag','')).strip()
+                how=str(item.get('how_found','')).strip()
+                if not flag or not how or re.search(r'[\x00-\x1f\x7f]',flag):continue
+                record=dict(
+                    flag=self.redact(flag),
+                    how_found=self.redact(how),
+                    challenge=self.redact(str(item.get('challenge','session'))),
+                    session_id=self.redact(str(item.get('session_id',''))),
+                    target_ip=self.redact(str(item.get('target_ip',self.identity))),
+                    host=self.redact(str(item.get('host','remote'))),
+                    recorded_at=self.redact(str(item.get('recorded_at',datetime.now(timezone.utc).isoformat()))),
+                )
+                key=(record['flag'],record['challenge'],record['target_ip'])
+                if key in index:entries[index[key]]=record
+                else:
+                    index[key]=len(entries)
+                    entries.append(record)
+            self.write('shared-findings.json',json.dumps(entries,ensure_ascii=False,indent=2))
+            md_text=self._format_shared_findings_md(entries)
+            md_target=(self.base/'shared-findings.md') if self.is_session else (self.shared_state/'shared-findings.md')
+            if not redirected(md_target):
+                md_target.write_text(self.redact(md_text),encoding='utf-8')
+            if self.is_session and self.base.parent.name=='CEH-Exam' and not redirected(self.base.parent):
+                top_md=self.base.parent/'shared-findings.md'
+                if not redirected(top_md):
+                    top_md.write_text(self.redact(md_text),encoding='utf-8')
+            return entries
+
+    def export_evidence(self,output_path=None):
+        excluded={'.sgptrc','provider-keys.json','cli-backup.json','credentials'}
+        text_suffixes={'.md','.txt','.json','.jsonl','.py','.sh','.ps1','.bat','.cmd','.log','.csv','.xml','.html','.yml','.yaml'}
+        if output_path is None or str(output_path)=='auto':
+            dest_dir=self.base.parent if (self.is_session and self.base.parent.name=='CEH-Exam') else (self.base if self.is_session else self.shared_state)
+            target=dest_dir/f'ceh-evidence-{self.identity}-latest.zip'
+        else:
+            candidate=Path(output_path).expanduser()
+            if candidate.exists() and candidate.is_dir():
+                stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+                target=candidate/f'ceh-evidence-{self.identity}-{stamp}.zip'
+            else:
+                target=candidate if candidate.suffix.lower()=='.zip' else candidate.with_suffix('.zip')
+        target=target.absolute()
+        if redirected(target) or redirected(target.parent):raise RuntimeError('Redirected export destination refused')
+        target.parent.mkdir(parents=True,exist_ok=True)
+        descriptor,temporary=tempfile.mkstemp(prefix='.export-',suffix='.zip',dir=target.parent)
+        os.close(descriptor)
+        temporary=Path(temporary)
+        added=set()
+        try:
+            with zipfile.ZipFile(temporary,'w',compression=zipfile.ZIP_DEFLATED) as zf:
+                for prefix,root_dir in (('',self.base),('_state/',self.shared_state)):
+                    if not root_dir.exists() or redirected(root_dir):continue
+                    for parent,dirs,files in os.walk(root_dir,followlinks=False):
+                        parent_path=Path(parent)
+                        dirs[:]=[d for d in sorted(dirs) if not redirected(parent_path/d) and not (prefix=='' and (parent_path/d).resolve()==self.shared_state.resolve())]
+                        for name in sorted(files):
+                            if name in excluded or name.endswith(('.lock','.zip')) or name.startswith('.'):continue
+                            file_path=parent_path/name
+                            if redirected(file_path) or not file_path.is_file():continue
+                            if file_path.resolve()==target.resolve() or file_path.resolve()==temporary.resolve():continue
+                            rel=file_path.relative_to(root_dir).as_posix()
+                            arcname=prefix+rel
+                            if arcname in added:continue
+                            if file_path.suffix.lower() in text_suffixes:
+                                text=file_path.read_text(encoding='utf-8',errors='replace')
+                                zf.writestr(arcname,self.redact(text).encode('utf-8'))
+                                added.add(arcname)
+                            elif file_path.stat().st_size<=52428800:
+                                zf.write(file_path,arcname)
+                                added.add(arcname)
+                manifest=dict(
+                    exported_at=datetime.now(timezone.utc).isoformat(),
+                    host=socket.gethostname(),
+                    target_ip=self.identity,
+                    session_id=self.session_id,
+                    file_count=len(added),
+                    shared_findings_count=len(self.shared_findings()),
+                )
+                zf.writestr('MANIFEST.json',json.dumps(manifest,ensure_ascii=False,indent=2).encode('utf-8'))
+            os.chmod(temporary,0o600)
+            os.replace(temporary,target)
+        finally:
+            if temporary.exists():temporary.unlink()
+        return str(target)
+
+    def sync_peer(self,peer,runner=subprocess.run):
+        if not isinstance(peer,str) or not re.fullmatch(r'(?!-)(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9_.-]+\Z',peer):
+            raise ValueError('Supply a valid SSH peer target such as attacker@10.10.10.13')
+        pull_cmd=['ssh','-o','BatchMode=yes','-o','ConnectTimeout=10',peer,'sgpt --export-findings-json']
+        pull=runner(pull_cmd,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30)
+        if pull.returncode!=0:
+            raise RuntimeError(f'Peer export failed ({pull.returncode}): {(pull.stderr or pull.stdout).strip()}')
+        raw_out=(pull.stdout or '').strip()
+        start_idx=raw_out.find('[')
+        end_idx=raw_out.rfind(']')
+        remote_entries=json.loads(raw_out[start_idx:end_idx+1]) if (start_idx!=-1 and end_idx>=start_idx) else []
+        merged=self.merge_shared_findings(remote_entries)
+        push_cmd=['ssh','-o','BatchMode=yes','-o','ConnectTimeout=10',peer,'sgpt --import-findings-json']
+        push=runner(push_cmd,input=json.dumps(merged,ensure_ascii=False),capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30)
+        if push.returncode!=0:
+            raise RuntimeError(f'Peer import failed ({push.returncode}): {(push.stderr or push.stdout).strip()}')
+        board=(self.base/'shared-findings.md') if self.is_session else (self.shared_state/'shared-findings.md')
+        return f'Synced {len(merged)} verified findings with {peer}. Shared board: {board}'
 
     def index_tools(self,root):
         root=Path(root).expanduser()
@@ -425,8 +640,17 @@ class Workflow:
     def context(self):
         path=self.shared_state/'network-info.json'
         data=self.network_data()
-        if not data:return 'Working scope: assigned CEH lab machines/services, including public URLs/domains. Passive public sources and ordinary public-page/DNS lookups are allowed. Reuse the supplied task target; no CIDR or initialization is required for public research. Local facts have not been collected yet; initialize when requested. Custom tool paths are optional.'
+        shared=[dict(flag=item['flag'],challenge=item.get('challenge'),target_ip=item.get('target_ip')) for item in self.shared_findings()[-6:]]
+        if not data:
+            text='Working scope: assigned CEH lab machines/services, including public URLs/domains. Passive public sources and ordinary public-page/DNS lookups are allowed. Reuse the supplied task target; no CIDR or initialization is required for public research. Local facts have not been collected yet; initialize when requested. Custom tool paths are optional.'
+            if shared:text+=' Confirmed shared findings: '+json.dumps(shared,ensure_ascii=False)
+            return text[:1000]
         # Never attach the full network dump or tool catalog to paid requests.
         summary=dict(working_scope='Assigned CEH lab machines/services, including public URLs/domains',public_research='Passive public sources and ordinary public-page/DNS lookups allowed; reuse the supplied target, no CIDR needed',host=data.get('host'),local_ipv4=data.get('local_ipv4',[]),known_lab_range=data.get('scope'),optional_tools_root=data.get('tools_root'),
                      observed_hosts=data.get('observed_hosts',[])[:8],observations_time=data.get('discovered_at'),details_file=str(path))
-        return json.dumps(summary,ensure_ascii=False)[:1000]
+        if shared:summary['shared_findings']=shared
+        encoded=json.dumps(summary,ensure_ascii=False)
+        if len(encoded)>1000 and 'shared_findings' in summary:
+            summary['shared_findings']=shared[-2:]
+            encoded=json.dumps(summary,ensure_ascii=False)
+        return encoded[:1000]

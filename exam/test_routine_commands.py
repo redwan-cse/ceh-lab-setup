@@ -16,9 +16,22 @@ class RoutineTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.folder=Path(self.temp.name)
-        self.resolve=lambda name:'/usr/bin/'+name if name in {'curl','grep','sort','wc','cat','head','echo','printf','uniq','pwd','ls'} else None
+        self.resolve=lambda name:'/usr/bin/'+name if name in {'curl','grep','sort','wc','cat','head','echo','printf','uniq','pwd','ls','find','ip'} else None
 
     def classify(self,command):return classify_linux(command,self.folder,self.resolve,cwd=self.folder)
+
+    def test_local_inspection_tools_use_literal_arguments(self):
+        plan=self.classify("ip -br address show; ip -4 route show; find . -maxdepth 2 -type f -name '*.txt' | head -20")
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan[0]['argv'],[['/usr/bin/ip','-br','address','show']])
+        self.assertEqual(plan[2]['argv'][0],['/usr/bin/find','-P','.','-maxdepth','2','-type','f','-name','*.txt'])
+
+    def test_local_tool_allowlist_rejects_effectful_flags(self):
+        for command in ('ip -batch commands.txt','ip link set eth0 down','ip netns exec local id',
+                        'find . -maxdepth 2 -delete','find . -maxdepth 2 -exec echo {} +',
+                        'find . -maxdepth 2 -fprint log.txt','find -L . -maxdepth 2',
+                        'find . -maxdepth 2 -name a -o -delete','find . -type f'):
+            with self.subTest(command=command):self.assertIsNone(self.classify(command))
 
     def test_user_download_and_email_search_examples(self):
         download=self.classify('cd $CEH_EXAM_DIR && curl -sS --max-time 60 -A "Mozilla/5.0 (X11; Linux x86_64)" https://example.com/bundle.js -o bundle.js; echo "exit=$?"; wc -c bundle.js')

@@ -56,6 +56,30 @@ def _uniq_safe(args):
     return len(operands)<=1  # A second positional operand is an output file.
 
 
+def _local_ip_inspection(args):
+    """Allow named local queries with display options only."""
+    options = {'-4', '-6', '-br', '-brief', '-j', '-json'}
+    objects = {'addr', 'address', 'link', 'route', 'neigh', 'neighbor'}
+    return (len(args) >= 2 and args[-2] in objects and args[-1] == 'show'
+            and all(option in options for option in args[:-2]))
+
+
+def _bounded_find(args):
+    """List names under one path, without following symlinks or evaluating arbitrary expressions."""
+    if len(args) < 3 or not args[0] or args[0].startswith(('-', '!', '(', ')', ',')):
+        return False
+    if args[1] != '-maxdepth' or not re.fullmatch(r'[0-5]', args[2]):
+        return False
+    predicates = args[3:]
+    if predicates[-1:] == ['-print']:
+        predicates = predicates[:-1]
+    if predicates[:1] == ['-type']:
+        if len(predicates) < 2 or predicates[1] not in {'d', 'f', 'l'}:
+            return False
+        predicates = predicates[2:]
+    return not predicates or (len(predicates) == 2 and predicates[0] in {'-name', '-iname'})
+
+
 def _curl(args,cwd,root):
     values={'-A','--user-agent','-H','--header','-e','--referer','--max-time','--connect-timeout','--max-redirs','-X','--request','--url','-o','--output'}
     flags={'--silent','--show-error','--location','--head','--get','--fail','--fail-with-body','--compressed','--verbose','--http1.1','--http2'}
@@ -130,6 +154,11 @@ def classify_linux(command,exam_dir,resolve_executable,cwd=None):
                         if not _sort_safe(args):return None
                     elif name=='uniq':
                         if not _uniq_safe(args):return None
+                    elif name=='ip':
+                        if not _local_ip_inspection(args):return None
+                    elif name=='find':
+                        if not _bounded_find(args):return None
+                        args=['-P',*args]
                     elif name not in {'pwd','ls','cat','head','tail','wc','id','whoami','uname','ps','df','du','stat','readlink','grep','egrep','fgrep','cut','tr','echo','printf','strings','base64','sha1sum','sha224sum','sha256sum','sha512sum','md5sum','dig','nslookup','whois','which'}:return None
                     executable=resolve_executable(stage[0])
                     if not executable:return None

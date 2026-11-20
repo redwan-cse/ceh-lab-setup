@@ -12,7 +12,7 @@ import json
 import tempfile
 import uuid
 import re
-from providers import PROFILES, GOOGLE_BASE, STEP_BASE, select_profile
+from providers import PROFILES, MODES, GOOGLE_BASE, STEP_BASE, select_profile
 
 
 def windows_acl(path, directory=False):
@@ -101,10 +101,19 @@ def require_owned_install():
         raise RuntimeError('Install the owned exam runtime before changing this installation')
 
 
-def switch_provider(name,prompt=True):
+def switch_mode(mode):
+    require_owned_install()
+    if mode not in MODES:raise ValueError('Unknown approval mode: '+str(mode))
+    active=read()
+    active['EXAM_MODE']=mode
+    save(active)
+    print('Approval mode: '+mode+' (persistent)')
+
+
+def switch_provider(name,prompt=True,mode=None):
     require_owned_install()
     active=read()
-    selected=select_profile(active,name,load_keys())
+    selected=select_profile(active,name,load_keys(),mode=mode)
     if not selected.get('OPENAI_API_KEY'):
         if not prompt:raise RuntimeError('No saved key for '+name+'; active provider kept')
         key=getpass.getpass(name+' API key (hidden; Enter cancels): ')
@@ -117,6 +126,7 @@ def switch_provider(name,prompt=True):
     print('Provider: '+selected['EXAM_PROFILE'])
     print('Model: '+selected['DEFAULT_MODEL'])
     print('Endpoint: '+selected['API_BASE_URL'])
+    print('Approval mode: '+selected.get('EXAM_MODE','default'))
 
 
 def key_prompt(values,save_active=True):
@@ -332,18 +342,24 @@ def main():
     parser.add_argument('--key-stdin',action='store_true',help=argparse.SUPPRESS)
     parser.add_argument('--configure',action='store_true',help=argparse.SUPPRESS)
     parser.add_argument('--provider',choices=PROFILES)
+    parser.add_argument('--mode',choices=MODES,help='Persistent approval mode: default or turbo')
+    parser.add_argument('--switch-mode',action='store_true',help='Switch persistent approval mode (default or turbo) without package changes')
     parser.add_argument('--switch-provider',action='store_true',help='Select the active provider without package changes or API calls')
     parser.add_argument('--profile-only',action='store_true',help='Switch an existing exam installation without reinstalling packages')
     parser.add_argument('--reuse-stepfun-key',action='store_true',help='Import the existing same-account StepFun key after checking its endpoint')
     args=parser.parse_args()
     assert sys.version_info>=(3,10),'Python 3.10+ required'
+    if args.switch_mode:
+        if not args.mode:parser.error('--switch-mode requires --mode')
+        switch_mode(args.mode)
+        return
     if args.switch_provider:
         if not args.provider:parser.error('--switch-provider requires --provider')
-        switch_provider(args.provider,prompt=not args.no_key_prompt)
+        switch_provider(args.provider,prompt=not args.no_key_prompt,mode=args.mode)
         return
     if args.key_only:
         active=read()
-        values=select_profile(active,args.provider,load_keys()) if args.provider else active
+        values=select_profile(active,args.provider,load_keys(),mode=args.mode) if args.provider else active
         save_active=not args.provider or args.provider==active.get('EXAM_PROFILE')
         if args.key_stdin:
             if values.get('API_BASE_URL') not in {p['base'] for p in PROFILES.values()}:raise RuntimeError('Unexpected key destination')
@@ -364,6 +380,7 @@ def main():
         if args.no_key_prompt:command+=['--no-key-prompt']
         if args.activate:command+=['--activate']
         if args.provider:command+=['--provider',args.provider]
+        if args.mode:command+=['--mode',args.mode]
         if args.reuse_stepfun_key:command+=['--reuse-stepfun-key']
         subprocess.run(command,check=True);return
     if not args.profile_only and sys.prefix==sys.base_prefix:raise RuntimeError('Dedicated venv required')
@@ -376,7 +393,7 @@ def main():
             imported=dict(line.split('=',1) for line in old.read_text().splitlines() if '=' in line)
             if imported.get('API_BASE_URL','').rstrip('/')!=STEP_BASE.rstrip('/'):raise RuntimeError('Existing StepFun endpoint does not match; key not imported')
             remember_key(imported)
-    selected=select_profile(existing,args.provider or existing.get('EXAM_PROFILE','openrouter-deepseek'),load_keys())
+    selected=select_profile(existing,args.provider or existing.get('EXAM_PROFILE','openrouter-deepseek'),load_keys(),mode=args.mode)
     settings=dict(selected,
         USE_LITELLM='false',OPENAI_USE_FUNCTIONS='true',OPENAI_FUNCTIONS_PATH=str(CONFIG/'functions'),
         ROLE_STORAGE_PATH=str(CONFIG/'roles'),CACHE_PATH=str(CONFIG/'cache'),CHAT_CACHE_PATH=str(CONFIG/'chats'),

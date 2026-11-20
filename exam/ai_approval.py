@@ -46,18 +46,45 @@ report_write must list at least one output. Installation/deletion/system changes
 must return approve:false. Do not add commentary.'''
 
 
+_CATASTROPHIC=[
+    r'(^|[\s;&|])(?:reboot|shutdown|poweroff|halt|mkfs(?:\.[\w]+)?)(?=\s|$)',
+    r'\binit\s+[06]\b',
+    r'\b(?:Format-Volume|Clear-Disk|Stop-Computer|Restart-Computer)\b',
+    r'\brm\s+-[^\n;|]*r[^\n;|]*\s+/(?:\s|$|[;&|])',
+]
+_RESERVED_EVIDENCE=r'(?:^|[\\/\'\"\s])(?:terminal\.md|terminal\.txt|findings\.txt|shared-findings\.md|shared-findings\.json)(?:$|[\'\"\s;&|])'
+
+
 class ApprovalReviewer:
-    def __init__(self,client,model,folder,emit,redact,task=lambda:'',diagnostic=None):
+    def __init__(self,client,model,folder,emit,redact,task=lambda:'',diagnostic=None,mode='ai'):
         self.client=client;self.model=model;self.folder=Path(folder).absolute()
         self.emit=emit;self.diagnostic=diagnostic or emit;self.redact=redact;self.task=task;self.cache={}
+        self.mode=mode if mode in ('default','turbo','ai') else 'default'
+
+    def _overwrites_reserved_evidence(self,source):
+        if not re.search(_RESERVED_EVIDENCE,source,re.I):
+            return False
+        return bool(re.search(r'(?:>>?|Out-File|Set-Content|Add-Content|tee|cp|mv|Move-Item|Copy-Item|\.write)',source,re.I))
 
     def approve(self,command,script_source='',cwd=None):
         """Return an approval, or False to request the existing human approval."""
         source=str(command)+'\n'+script_source
         screening=source+'\n'+re.sub(r"['\",\[\]()]",' ',source)
-        if not command or len(command)>20000 or len(script_source)>30000 or any(re.search(pattern,screening,re.I) for pattern in _HOLDS):
+        if not command or len(command)>20000 or len(script_source)>30000:
             self.emit('[sgpt] Human approval required for protected or unreviewable operations.')
             return False
+        if any(re.search(pattern,screening,re.I) for pattern in _CATASTROPHIC) or self._overwrites_reserved_evidence(source):
+            self.emit('[sgpt] Human approval required for protected or catastrophic system operation.')
+            return False
+        if self.mode=='turbo':
+            self.diagnostic('[sgpt] Turbo mode auto-approved this operation.')
+            return True
+        if any(re.search(pattern,screening,re.I) for pattern in _HOLDS):
+            self.emit('[sgpt] Human approval required for protected or unreviewable operations.')
+            return False
+        if self.mode=='default':
+            self.diagnostic('[sgpt] Default mode auto-approved non-dangerous operation.')
+            return True
         cwd=Path(cwd or os.getcwd()).absolute()
         goal=self.task()[:2000]
         key=hashlib.sha256((source+'\n'+str(cwd)+'\n'+goal).encode()).hexdigest()

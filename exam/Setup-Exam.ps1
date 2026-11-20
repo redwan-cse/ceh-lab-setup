@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon','openrouter-deepseek')][string]$Provider,[switch]$ReuseStepFunKey)
+param([switch]$NoKeyPrompt,[ValidateSet('stepfun','gemini-mix','gemini-carbon','openrouter-deepseek')][string]$Provider,[ValidateSet('default','turbo')][string]$Mode,[switch]$ReuseStepFunKey)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $privatePython=Join-Path $env:LOCALAPPDATA 'CEHLab\shellgpt-exam\venv\Scripts\python.exe'
@@ -42,6 +42,7 @@ $extra=@()
 if($NoKeyPrompt){$extra+='--no-key-prompt'}
 if($ReuseStepFunKey){$extra+='--reuse-stepfun-key'}
 if($Provider){$extra+=@('--provider',$Provider)}
+if($Mode){$extra+=@('--mode',$Mode)}
 $previousPreference=$ErrorActionPreference
 $pythonExit=1
 try{

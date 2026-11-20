@@ -1,5 +1,9 @@
 """Cache limits must not separate tool results from their assistant call."""
 import copy
+from contextlib import ExitStack
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from terminal_ui import install_chat_cache_guard
 
@@ -43,6 +47,37 @@ class ChatRetentionTests(unittest.TestCase):
         stored=copy.deepcopy(cache.data)
         self.assertEqual(cache._read('test'),[messages[0],*messages[5:]])
         self.assertEqual(cache.data,stored)
+
+    def test_active_chat_refuses_a_second_writer_and_unlocks_on_exit(self):
+        import terminal_ui
+
+        class Context(ExitStack):
+            with_resource = ExitStack.enter_context
+
+        class Handler:
+            def __init__(self, chat_id):
+                starts.append(chat_id)
+
+        starts = []
+        context = None
+        terminal_ui.install_chat_writer_guard(Handler, lambda **_: context)
+        with TemporaryDirectory() as folder:
+            Handler.chat_session = SimpleNamespace(storage_path=Path(folder)/'chats'/'provider')
+            Handler.chat_session.storage_path.mkdir(parents=True)
+            with Context() as first:
+                context = first
+                Handler('docs')
+                with Context() as second:
+                    context = second
+                    with self.assertRaisesRegex(terminal_ui.ChatAlreadyOpen, 'another terminal'):
+                        Handler('docs')
+                    Handler('logs')
+                self.assertEqual(starts, ['docs', 'logs'])
+            with Context() as reopened:
+                context = reopened
+                Handler('docs')
+            self.assertEqual(starts, ['docs', 'logs', 'docs'])
+            self.assertEqual(list(Handler.chat_session.storage_path.iterdir()), [])
 
 
 if __name__=='__main__':unittest.main()

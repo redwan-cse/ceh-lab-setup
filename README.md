@@ -78,9 +78,12 @@ active key later:
 ```bash
 sgpt --version
 sgpt --model-info
+sgpt --mode default   # or: sgpt --mode turbo
 sgpt "init the machine"
 sgpt --tool-help "nmap"
 sgpt --challenge 1 --repl challenge1
+sgpt --show-findings
+sgpt --export-evidence
 ```
 
 For a normal conversation, run **`sgpt`** without a prompt. Type your task at
@@ -203,9 +206,12 @@ If setup used its app-local Python and `python` is not on PATH:
 ```powershell
 sgpt --version
 sgpt --model-info
+sgpt --mode default   # or: sgpt --mode turbo
 sgpt "init the machine"
 sgpt --tool-help "nmap"
 sgpt --challenge 1 --repl challenge1
+sgpt --show-findings
+sgpt --export-evidence
 ```
 
 Initialization selects the native PowerShell collector for host identity,

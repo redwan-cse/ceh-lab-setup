@@ -48,6 +48,17 @@ class PolicyTests(unittest.TestCase):
             result = guard.execute_command('Get-Location')
         self.assertIn('Exit code: 0', result)
 
+    def test_local_network_settings_run_without_prompt(self):
+        command='Get-NetIPAddress -AddressFamily IPv4 | Select-Object -First 1 -Property IPAddress'
+        decision=guard.classify(command)
+        self.assertTrue(decision['automatic'],decision)
+        self.assertIn('NetTCPIP\\Get-NetIPAddress',decision['command'])
+        with patch('builtins.input',side_effect=AssertionError('Unexpected approval prompt')):
+            self.assertIn('Exit code: 0',guard.execute_command(command))
+        for command in ('Get-NetIPAddress -CimSession other-host', 'Set-NetIPAddress -IPAddress 192.0.2.1',
+                        'Get-NetRoute | Remove-NetRoute'):
+            self.assertFalse(guard.classify(command)['automatic'],command)
+
     def test_denial_and_missing_input_do_not_execute(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'should-not-exist'

@@ -1,8 +1,8 @@
-# Select the provider used by the single sgpt command. Keys stay off command lines.
+# Select the provider or approval mode used by the single sgpt command. Keys stay off command lines.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true, Position=0)]
-    [ValidateSet('deepseek','stepfun')]
+    [ValidateSet('deepseek','stepfun','default','turbo')]
     [string]$Provider
 )
 $ErrorActionPreference = 'Stop'
@@ -20,6 +20,10 @@ if (Test-Path -LiteralPath $dedicatedPython -PathType Leaf) {
     $python = $candidate.Source
     if ($candidate.Name -eq 'py.exe') { $pythonArguments = @('-3') }
 }
-$selected = if ($Provider -eq 'deepseek') { 'openrouter-deepseek' } else { 'stepfun' }
-& $python @pythonArguments $setup --switch-provider --provider $selected
+if ($Provider -in @('default','turbo')) {
+    & $python @pythonArguments $setup --switch-mode --mode $Provider
+} else {
+    $selected = if ($Provider -eq 'deepseek') { 'openrouter-deepseek' } else { 'stepfun' }
+    & $python @pythonArguments $setup --switch-provider --provider $selected
+}
 exit $LASTEXITCODE
