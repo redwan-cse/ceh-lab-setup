@@ -54,8 +54,16 @@ sgpt --init-lab --tools-path /PATH/TO/CEH_TOOLS
 Manual switching, without reinstalling or making an API request:
 
 ```bash
+# Switch provider/model:
 bash ./exam/switch-model.sh stepfun
 bash ./exam/switch-model.sh deepseek
+
+# Switch execution approval mode (persistent):
+sgpt --mode turbo      # Auto-runs all commands/scripts without permission prompts
+sgpt --mode default    # Prompts human confirmation only for dangerous commands
+# Or via switcher script:
+bash ./exam/switch-model.sh turbo
+bash ./exam/switch-model.sh default
 ```
 
 To enter/replace the active key later, preview/reset generated logs, or remove
@@ -113,8 +121,16 @@ sgpt --init-lab --tools-path 'C:\PATH\TO\CEH_TOOLS'
 Manual switching, without reinstalling or making an API request:
 
 ```powershell
+# Switch provider/model:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 stepfun
 powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 deepseek
+
+# Switch execution approval mode (persistent):
+sgpt --mode turbo      # Auto-runs all commands/scripts without permission prompts
+sgpt --mode default    # Prompts human confirmation only for dangerous commands
+# Or via switcher script:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 turbo
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 default
 ```
 
 With existing system Python, key entry, log reset and removal use:
@@ -329,15 +345,41 @@ execution. This guard is an approval aid, not an OS sandbox. Each request has
 a 90-second timeout and no automatic retries. Empty responses produce an
 incomplete-task message.
 
-### AI approve for me
+### Execution modes: Default vs Turbo
 
-The default is layered approval: known literal routine forms run immediately;
-otherwise the **same active model and endpoint** review the exact command.
-For a generated/edited script, the reviewer also sees its owned, hash-verified
-source before execution. Clear routine work is approved without typing `yes`.
-This covers compound `find`, `file`, Nmap/report commands and redirections such
-as `2>/dev/null` or `2>&1`, even when the literal planner does not support them.
-The existing shell/interpreter executes the reviewed operation normally.
+The exam setup provides two persistent execution approval modes configured in `.config/shell_gpt_exam/.sgptrc`:
+
+- **`default` mode (safe auto-run)**: Routine commands, system inspections, and owned scripts execute automatically using fast local screening without per-command approval API calls or token latency. Only dangerous operations (deletions, package installations, firewall/network modifications, privilege escalation via `sudo`, or overwriting existing exam evidence) prompt for interactive human approval (`[y/N]`).
+- **`turbo` mode (unattended auto-run)**: All commands and owned scripts run automatically without interactive prompts (like Antigravity Turbo), blocking only catastrophic host destruction (`shutdown`, `reboot`, `Format-Volume`, `Clear-Disk`, `rm -rf /`, or destroying the exam directory).
+
+On the first command or script executed in any process, `sgpt` displays a one-time banner announcing the active mode:
+- `[sgpt] Running in DEFAULT mode (persistent): routine commands run automatically; dangerous commands ask for permission.`
+- `[sgpt] Running in TURBO mode (persistent): commands and scripts run automatically without permission prompts.`
+
+#### Switch execution modes
+
+```bash
+# Switch persistently via sgpt:
+sgpt --mode turbo
+sgpt --mode default
+sgpt --model-info
+
+# Switch via repo helper script (Linux):
+bash ./exam/switch-model.sh turbo
+bash ./exam/switch-model.sh default
+
+# Switch via repo helper script (Windows):
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 turbo
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 default
+```
+
+### Local screening and AI approval review
+
+In `default` mode, fast local screening evaluates commands before execution:
+known routine inspections and owned scripts run immediately without typing `yes`.
+For complex or compound commands, the active provider and model review the exact
+command text and hash-verified script source.
+Output paths are checked locally on every approval.
 
 The reviewer receives command text, owned script source, task context and paths;
 it does not read existing task files. Decisions and API usage are logged. It

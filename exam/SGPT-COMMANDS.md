@@ -209,6 +209,66 @@ These names are model tools, **not standalone terminal commands**:
 
 Ask for the task in normal language; sgpt chooses the needed tools.
 
+## Switch execution modes (Default vs Turbo)
+
+The runtime supports two persistent approval modes stored in `.config/shell_gpt_exam/.sgptrc`:
+
+- **`default` mode**: Routine operations, inspections, and owned scripts execute automatically without permission prompts or approval API calls. Only dangerous or state-altering actions (e.g. `rm`, package installs/upgrades, service/firewall/network changes, `sudo`, evidence overwriting) require human confirmation (`[y/N]`).
+- **`turbo` mode**: Auto-runs all commands and owned scripts immediately without interactive permission prompts (similar to Antigravity Turbo). Only catastrophic VM-destruction commands (`shutdown`, `reboot`, `Format-Volume`, `Clear-Disk`, `rm -rf /`, or deleting `$CEH_EXAM_DIR`) are hard-blocked.
+
+The first command executed in any new process announces the active mode once:
+- `[sgpt] Running in DEFAULT mode (persistent): routine commands run automatically; dangerous commands ask for permission.`
+- `[sgpt] Running in TURBO mode (persistent): commands and scripts run automatically without permission prompts.`
+
+### Switching modes via sgpt CLI
+
+You can switch modes persistently anytime directly from `sgpt`:
+
+```bash
+# Enable Turbo mode (auto-run everything without interactive prompts)
+sgpt --mode turbo
+
+# Return to Default mode (safe auto-run, prompt only for dangerous commands)
+sgpt --mode default
+
+# Verify active mode and provider
+sgpt --model-info
+```
+
+### Switching modes via helper scripts
+
+You can also use the repo's switcher scripts from the repository root:
+
+**Parrot / Linux:**
+```bash
+bash ./exam/switch-model.sh turbo
+bash ./exam/switch-model.sh default
+```
+
+**Windows PowerShell:**
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 turbo
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 default
+```
+
+### Setting mode during setup
+
+When running the initial setup or reconfiguring:
+
+**Parrot / Linux:**
+```bash
+bash ./exam/setup-exam.sh --mode turbo
+# or
+bash ./exam/setup-exam.sh --mode default
+```
+
+**Windows PowerShell:**
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1 -Mode turbo
+# or
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Setup-Exam.ps1 -Mode default
+```
+
 ## Switch models and update the setup
 
 Run these helper scripts **from the repository root**, outside the sgpt chat.

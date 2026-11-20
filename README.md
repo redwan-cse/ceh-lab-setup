@@ -116,9 +116,17 @@ Long tasks get 40 main-agent rounds, then an interactive **continue? [y/N]**
 prompt. `yes` continues with the existing results. Use `--tool-rounds 60` to
 choose a larger block; [continuation details](exam/README.md#longer-tasks-and-continuation).
 
-### Switch models without reinstalling
+### Switch execution modes and models without reinstalling
 
 ```bash
+# Switch execution mode persistently:
+sgpt --mode turbo              # Auto-runs all commands/scripts without permission prompts
+sgpt --mode default            # Safe mode: prompts human confirmation only for dangerous commands
+# Or via repo script:
+bash ./exam/switch-model.sh turbo
+bash ./exam/switch-model.sh default
+
+# Switch provider/model:
 bash ./exam/switch-model.sh stepfun
 # Return to the exam model:
 bash ./exam/switch-model.sh deepseek
@@ -240,9 +248,17 @@ There is no separate tools-path input dialog. A path is optional: for example,
 type `Use C:\Users\Administrator\Desktop\Tools for this task` in chat, replacing
 it with the actual path. A specific executable or wordlist file is accepted too.
 
-### Switch models without reinstalling
+### Switch execution modes and models without reinstalling
 
 ```powershell
+# Switch execution mode persistently:
+sgpt --mode turbo              # Auto-runs all commands/scripts without permission prompts
+sgpt --mode default            # Safe mode: prompts human confirmation only for dangerous commands
+# Or via repo script:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 turbo
+powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 default
+
+# Switch provider/model:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 stepfun
 # Return to the exam model:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\exam\Switch-Model.ps1 deepseek
